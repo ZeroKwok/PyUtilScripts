@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyutilscripts"
+authors = [{ name = "Zero Kwok", email = "zero.kwok@foxmail.com" }]
+description = "PyUtilScripts 是一个基于 Python 的通用小工具集合，目标是提供编写通用任务的辅助工具。"
+keywords = ["tools"]
+readme = "README.md"
+requires-python = ">=3.7"
+license = {text = "MIT License"}
+classifiers = [
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Build Tools",
+
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+dependencies = [
+    "termcolor",
+]
+dynamic = ["version"]
+
+[tool.setuptools.dynamic]
+version = {attr = "pyutilscripts.projectVersion"}
+
+[project.urls]
+Homepage = "https://github.com/ZeroKwok/pyutilscripts"
+Issues = "https://github.com/ZeroKwok/pyutilscripts/issues"
+
+[project.scripts]
+fcopy = "pyutilscripts.fcopy:main"
+prunedirs = "pyutilscripts.prunedirs:main"
+forward-tcp = "pyutilscripts.forward-tcp:main"
