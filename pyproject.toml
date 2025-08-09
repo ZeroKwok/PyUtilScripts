@@ -36,6 +36,6 @@ Homepage = "https://github.com/ZeroKwok/pyutilscripts"
 Issues = "https://github.com/ZeroKwok/pyutilscripts/issues"
 
 [project.scripts]
-fcopy = "pyutilscripts.fcopy:main"
-prunedirs = "pyutilscripts.prunedirs:main"
-forward-tcp = "pyutilscripts.forward-tcp:main"
+"fcopy" = "pyutilscripts.fcopy:main"
+"prunedirs" = "pyutilscripts.prunedirs:main"
+"forward.tcp" = "pyutilscripts.forward_tcp:main"
