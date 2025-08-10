@@ -19,7 +19,6 @@
 # python fcopy.py -l ../fcopy.list -d . -o "\\192.168.1.230\2024-01-26 1625"
 
 import os
-import shlex
 import sys
 import stat
 import shutil
@@ -60,22 +59,16 @@ def read_file_list(file_path):
     with open(file_path, 'r') as file:
         return [line.strip() for line in file.readlines() if not line[0].isdigit()]
 
-def main(sequence = None):
+def main():
     try:
         parser = argparse.ArgumentParser(description='Copy files from source directory to target directory.')
         parser.add_argument('-l', '--list', default='fcopy.list', help='File containing the list of files to copy.')
         parser.add_argument('-d', '--directory', default='.', help='Source directory where the files are located.')
         parser.add_argument('-o', '--output', required=True, help='Target directory where the files will be copied.')
         parser.add_argument('-v', '--verbose', action='store_true', default=False)
-
-        while True:
-            try:
-                args = parser.parse_args(shlex.split(sequence, posix=False) if sequence else None)
-                break
-            except SystemExit:
-                sequence = input('$ Please enter parameters:\n')
-                continue
-
+        args = parser.parse_args()
+ 
+        # argparse 默认会保留字符串中的引号
         for key in args.__dict__:
             if type(args.__dict__[key]) == str:
                 args.__dict__[key] = args.__dict__[key].strip(' \'"')
@@ -97,7 +90,7 @@ def main(sequence = None):
             success[key] = success.setdefault(key, 0) + len(report[1][key])
         failed  = [f'{i}: {failed[i]}' for i in failed]
         success = [f'{i}: {success[i]}' for i in success]
-        
+
         print()
         if args.verbose:
             print()
@@ -108,9 +101,9 @@ def main(sequence = None):
                 for f in report[1]['Update']:
                     cprint(f'{key}: {f}', 'green')
         cprint(f'{", ".join(success)} {", ".join(failed)}', 'yellow' if failed else 'green')
-    except:
-        traceback.print_exc()
 
+    except KeyboardInterrupt:
+        pass
 
 if __name__ == "__main__":
     main()
