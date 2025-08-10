@@ -30,7 +30,8 @@ import argparse
 import datetime
 import traceback
 from   pathlib import Path
-from   datetime import datetime
+from   natsort import natsorted
+from   datetime import datetime, timezone
 from   termcolor import colored, cprint
 
 CopyModes = ["update", "overwrite", "rename", "interactive", "u", "o", "r", "i"]
@@ -69,7 +70,49 @@ def make_file_list(source):
             filename = os.path.join(root, n)
             filename = os.path.relpath(filename, start=source)
             files.append(filename)
-    return files
+
+    date = datetime.now().isoformat(timespec='seconds')
+    head = ListFileHeader.format(date).splitlines()
+    return head + natsorted(files)
+
+def update_file_list(args):
+    """Update the file list with the current contents of the source directory."""
+    new = make_file_list(args.source)
+    old = []
+    if os.path.exists(args.list):
+        with open(args.list, 'r') as f:
+            old = [line.strip() for line in f.readlines()]
+
+    # 生成 unified diff
+    diff = difflib.unified_diff(
+        old,
+        new,
+        fromfile=args.list + ' (old)',
+        tofile=args.list + ' (new)',
+        lineterm=''
+    )
+
+    # 对 diff 行进行彩色渲染
+    print('')
+    for line in diff:
+        if line.startswith('+'):
+            cprint(line, 'green')  # 新增行：绿色
+        elif line.startswith('-'):
+            cprint(line, 'red')    # 删除行：红色
+        elif line.startswith('@@'):
+            cprint(line, 'cyan')   # 差异位置标记：青色
+        else:
+            cprint(line)
+
+    # Ask for confirmation
+    cprint(f"\nUpdate {args.list} with these changes? [y/N]", end=" ")
+    confirm = input().strip().lower()
+    if confirm != 'y':
+        cprint('User Cancelled', 'red')
+        raise SystemExit()
+
+    with open(args.list, 'w') as f:
+        f.write('\n'.join(new))
 
 def file_cmp(stat1, stat2):
     # 比较文件大小和修改时间
@@ -89,7 +132,7 @@ def increment_filename(directory, filename):
     stem, *suffixes = filename.split('.')
     suffix = '.' + '.'.join(suffixes) if suffixes else ''
 
-    # 若 base_name 形如 "file(1)"，则提取基础名与编号
+    # 若 stem 形如 "file(1)"，则提取基础名与编号
     match = re.match(r'^(.*?)(\((\d+)\))?$', stem )
     if match:
         stem = match.group(1)
@@ -152,46 +195,6 @@ def make_file_actions(args):
         else:
             items.append(('s', file, ''))
     return items
-
-
-def update_file_list(args):
-    """Update the file list with the current contents of the source directory."""
-    new = make_file_list(args.source)
-    old = []
-    if os.path.exists(args.list):
-        with open(args.list, 'r') as f:
-            old = f.readlines()
-    
-    # 生成 unified diff
-    diff = difflib.unified_diff(
-        old,
-        new,
-        fromfile=args.list + ' (old)',
-        tofile=args.list + ' (new)',
-        lineterm=''
-    )
-    
-    # 对 diff 行进行彩色渲染
-    print('')
-    for line in diff:
-        if line.startswith('+'):
-            cprint(line, 'green')  # 新增行：绿色
-        elif line.startswith('-'):
-            cprint(line, 'red')    # 删除行：红色
-        elif line.startswith('@@'):
-            cprint(line, 'cyan')   # 差异位置标记：青色
-        else:
-            cprint(line)
-    
-    # Ask for confirmation
-    confirm = input(f"Update {args.list} with {len(new)} files? [y/N] ").strip().lower()
-    if confirm != 'y':
-        print("Aborted")
-        return False
-    
-    with open(args.list, 'w') as f:
-        f.write(ListFileHeader.format(datetime.now().isoformat()))
-        f.write('\n'.join(new))
 
 def edit_actions(actions:list, header:str) -> list:
     """
@@ -274,7 +277,7 @@ def main():
             copy_files(args)
 
     except KeyboardInterrupt:
-        pass
+        cprint('\nKeyboard Interrupt', 'red', end='')
 
 if __name__ == "__main__":
     main()
