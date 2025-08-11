@@ -47,8 +47,8 @@ ActionsFileHeader = """# Action plan for file copying (edit this file to change 
 # Example:
 # c file1.txt                   Copy
 # c file3.txt -> file(3).txt    Copy and Rename to file(3).txt
-# s file2.txt                   Skip
 # o file2.txt                   Overwrite
+# s file2.txt                   Skip
 """
 
 def read_file_list(filename, comment='#', keep_comments=False):
@@ -152,35 +152,6 @@ def increment_filename(directory, filename):
 
     return candidate
 
-def parse_actions(lines, comment='#'):
-    files = []
-    for row, line in enumerate(lines):
-        line = line.strip()
-        if not line or line.startswith(comment) or line.startswith('s'):
-            continue
-
-        # Handle action-prefixed lines (for edit mode)
-        if ' ' not in line:
-            raise ValueError(f"Invalid line: {row}: {line}")
-
-        if '->'in line:
-            fields = shlex.split(line, posix=os.name != 'nt')
-        else:
-            fields = line.split(maxsplit=1)
-
-        if len(fields) == 2: 
-            action, file1, file2 = fields + ['']
-        elif len(fields) == 4 and '->' in fields:
-            action, file1, _, file2 = fields
-        else:
-            raise ValueError(f"Invalid line: {row}: {line}, parse as: {fields}")
-        files.append((action, file1.strip(' \'"'), file2.strip(' \'"')))
-
-    return files
-
-def read_file_actions(filename, comment='#'):
-    return parse_actions(read_file_list(filename, comment, True), comment)
-
 def make_file_actions(args):
     items = []
     for file in args.manifest:
@@ -205,9 +176,48 @@ def make_file_actions(args):
             items.append(('o', quotes(file), ''))
         else:
             items.append(('s', quotes(file), ''))
-    return items
+    return natsorted(items)
 
-def edit_actions(actions:list, header:str) -> list:
+def parse_actions(lines, comment='#'):
+    files = []
+    for row, line in enumerate(lines):
+        line = line.strip()
+        if not line or line.startswith(comment):
+            continue
+
+        # Handle action-prefixed lines (for edit mode)
+        if ' ' not in line:
+            raise ValueError(f"Invalid line: {row}: {line}")
+
+        if '->'in line:
+            fields = shlex.split(line, posix=os.name != 'nt')
+        else:
+            fields = line.split(maxsplit=1)
+
+        if len(fields) == 2: 
+            action, file1, file2 = fields + ['']
+        elif len(fields) == 4 and '->' in fields:
+            action, file1, _, file2 = fields
+        else:
+            raise ValueError(f"Invalid line: {row}: {line}, parse as: {fields}")
+        files.append((action, file1.strip(' \'"'), file2.strip(' \'"')))
+
+    return files
+
+def read_file_actions(filename, comment='#'):
+    return parse_actions(read_file_list(filename, comment, True), comment)
+
+def get_available_editor(verbose, defaults=("micro", "nano", "vim", "vi", "notepad")):
+    """检查哪个编辑器可用，返回第一个可用的，否则返回 None"""
+    if "EDITOR" in os.environ:
+        defaults.insert(0, os.environ["EDITOR"])
+        cprint(f'Preferred editor detected: {defaults[0]}', 'yellow')
+    for editor in defaults:
+        if shutil.which(editor):  # 检查是否在 PATH 里
+            return editor
+    return None
+
+def edit_actions(actions:list, header:str, verbose:int) -> list:
     """
     使用 click.edit() 启动编辑器让用户编辑行动计划。
     返回: None 用户取消编辑或没保存
@@ -220,10 +230,10 @@ def edit_actions(actions:list, header:str) -> list:
         lines.append(line)
     content = header.rstrip() + "\n\n" + "\n".join(lines) + "\n"
 
-    # 打开编辑器让用户编辑内容（会用系统默认编辑器或 $EDITOR）
-    edited = click.edit(content, extension=".actionplan")
+    # 打开编辑器让用户编辑内容
+    edited = click.edit(content, extension=".actions-todo", editor=get_available_editor(verbose))
     if edited is None:
-        cprint("User canceled or didn't save, Aborting.")
+        cprint("User canceled or didn't save, aborted.", "red")
         raise SystemExit()
 
     # 解析用户编辑后的结果
@@ -240,16 +250,28 @@ def copy_files(args):
 
     # 生成文件操作列表
     actions = make_file_actions(args)
-    actions = edit_actions(actions, ActionsFileHeader)
-    
+    actions = edit_actions(actions, ActionsFileHeader, args.verbose)
+
+    copied, skipped = (0, 0)
     for item in actions:
         if item[0] == 's':
+            skipped += 1
             continue
-        if item[0] in ('c', 'o'):
+
+        if item[0] in ('c', 'o', 'r'):
             source = os.path.normpath(os.path.join(args.source, item[1]))
             target = os.path.normpath(os.path.join(args.target, item[2] if item[2] else item[1]))
+
+            prefix = {'c' : 'Copy      ', 'o': 'Overwrite', 'r': 'Rename   '}[item[0]]
+            if args.verbose > 0:
+                cprint(f"{prefix}: {source} -> {target}", 'green')
+            else:
+                cprint(f"{prefix}: {item[1]}", 'green')
+
             os.makedirs(os.path.dirname(target), exist_ok=True)
             shutil.copy2(source, target)
+            copied += 1
+    cprint(f"Done. {copied} files copied, {skipped} skipped.")
 
 def main():
     try:
@@ -278,7 +300,9 @@ def main():
                 args.__dict__[key] = args.__dict__[key].strip(' \'"')
 
         if args.debug:
+            args.verbose = 2
             input('Wait for debugging and press Enter to continue...')
+
         if not args.list or not args.source:
             print("Error: Please provide the required arguments.")
             parser.print_help()
