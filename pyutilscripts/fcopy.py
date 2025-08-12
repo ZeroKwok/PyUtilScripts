@@ -15,9 +15,11 @@ import shlex
 import click
 import shutil
 import difflib
+import filecmp
 import argparse
 import datetime
 import traceback
+from   typing import Tuple
 from   pathlib import Path
 from   natsort import natsorted
 from   datetime import datetime
@@ -125,14 +127,29 @@ def update_file_list(args):
         f.write('\n'.join(new))
     return 0
 
-def file_cmp(stat1, stat2):
-    # 比较文件大小和修改时间
+def file_cmp(file1, file2, stat1, stat2) -> Tuple[bool, int]:
+    """Compare two files and return a tuple of (is_same, meta_cmp)."""
+    # 浅比较, 比较文件大小和修改时间
     if stat1.st_size == stat2.st_size and stat1.st_mtime == stat2.st_mtime:
-        return 0
-    if stat1.st_mtime >= stat2.st_mtime:
-        return 1
-    else:
-        return -1
+        return True, 0
+
+    # 根据修改时间, 对比谁比较新
+    meta_cmp = 1 if stat1.st_mtime >= stat2.st_mtime else -1
+
+    # 深比较
+    def _do_cmp(f1, f2):
+        bufsize = 8*1024
+        with open(f1, 'rb') as fp1, open(f2, 'rb') as fp2:
+            while True:
+                b1 = fp1.read(bufsize)
+                b2 = fp2.read(bufsize)
+                if b1 != b2:
+                    return False
+                if not b1:
+                    return True
+    if _do_cmp(file1, file2):
+        return True, meta_cmp
+    return False, meta_cmp
 
 def increment_filename(directory, filename, rename_list):
     """
@@ -206,11 +223,12 @@ def make_actions(args):
             items.append(('o', file, ''))
             continue
 
-        diff = file_cmp(stat1, stat2)
-        if diff > 0:
-            items.append(('o', file, ''))
-        else:
+        is_same, meta_cmp = file_cmp(source, target, stat1, stat2)
+        if is_same:
             items.append(('s', file, ''))
+        else:
+            items.append(('o', file, ''))
+
     return natsorted(items)
 
 def parse_actions(lines, comment='#'):
