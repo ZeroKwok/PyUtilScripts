@@ -19,7 +19,7 @@ import filecmp
 import argparse
 import datetime
 import traceback
-from   typing import Tuple
+from   typing import Tuple, List
 from   pathlib import Path
 from   natsort import natsorted
 from   datetime import datetime
@@ -189,9 +189,21 @@ def increment_filename(directory, filename, rename_list):
 
     return components / candidate 
 
+class Action:
+    """Action类用于描述操作行为"""
+    def __init__(self, action: str, src: str, dst: str = '', common: str = None):
+        self.action = action
+        self.src = src
+        self.dst = dst
+        self.common = common
+
+    def __iter__(self):
+        return iter((self.action, self.src, self.dst))
+
 def make_actions(args):
-    items = []
-    rename_list = []
+    items: List[Action] = []
+    rename_list: List[str] = []
+
     for file in args.manifest:
         if filter_match(file, args.filter_patterns):
             if args.verbose:
@@ -210,24 +222,24 @@ def make_actions(args):
         try:
             stat2 = os.stat(target)
         except FileNotFoundError:
-            items.append(('c', file, ''))
+            items.append(Action('c', file))
             continue
 
         if args.mode in ('r', 'rename'):
             file2 = increment_filename(args.target, file, rename_list)
-            items.append(('c', file, str(file2)))
+            items.append(Action('c', file, str(file2)))
             rename_list.append(file2)
             continue
 
         elif args.mode in ('o', 'overwrite'):
-            items.append(('o', file, ''))
+            items.append(Action('o', file))
             continue
 
         is_same, meta_cmp = file_cmp(source, target, stat1, stat2)
         if is_same:
-            items.append(('s', file, ''))
+            items.append(Action('s', file))
         else:
-            items.append(('o', file, ''))
+            items.append(Action('o', file))
 
     return natsorted(items)
 
@@ -253,12 +265,36 @@ def parse_actions(lines, comment='#'):
             action, file1, _, file2 = fields
         else:
             raise ValueError(f"Invalid line: {row}: {line}, parse as: {fields}")
-        files.append((action, file1.strip(' \'"'), file2.strip(' \'"')))
+        files.append(Action(action, file1.strip(' \'"'), file2.strip(' \'"')))
 
     return files
 
 def read_file_actions(filename, comment='#'):
     return parse_actions(read_file_list(filename, comment, True), comment)
+
+def join_actions(actions:list[Action], header:str, verbose:int):
+    lines = []
+    for item in actions:
+        line = f'{item.action}  "{item.src}"'
+        if item.dst:
+            line += f' -> "{item.dst}"'
+        lines.append(line)
+    return header.rstrip() + "\n\n" + "\n".join(lines) + "\n"
+
+def print_actions(actions:list, header:str, verbose:int):
+    print()
+    cprint(f"The following actions will be performed:", "yellow")
+    lines = join_actions(actions, header, verbose)
+    for line in lines.splitlines():
+        if not line:
+            print()
+            continue
+
+        a = line[0]
+        c = {"#": "dark_grey", "s": "yellow", "o": "green", "c": "green", " ": "white"}
+        f = a if a in c else " "
+        cprint(line, c[f])
+    print()
 
 def get_available_editor(defaults=("micro", "nano", "vim", "vi", "notepad")):
     """检查哪个编辑器可用，返回第一个可用的，否则返回 None"""
@@ -269,15 +305,6 @@ def get_available_editor(defaults=("micro", "nano", "vim", "vi", "notepad")):
         if shutil.which(editor):  # 检查是否在 PATH 里
             return editor
     return None
-
-def join_actions(actions:list, header:str, verbose:int):
-    lines = []
-    for item in actions:
-        line = f'{item[0]}  "{item[1]}"'
-        if item[2]:
-            line += f' -> "{item[2]}"'
-        lines.append(line)
-    return header.rstrip() + "\n\n" + "\n".join(lines) + "\n"
 
 def edit_actions(actions:list, header:str, verbose:int) -> list:
     """
@@ -294,21 +321,6 @@ def edit_actions(actions:list, header:str, verbose:int) -> list:
 
     # 解析用户编辑后的结果
     return parse_actions(edited.splitlines(), '#')
-
-def print_actions(actions:list, header:str, verbose:int):
-    print()
-    cprint(f"The following actions will be performed:", "yellow")
-    lines = join_actions(actions, header, verbose)
-    for line in lines.splitlines():
-        if not line:
-            print()
-            continue
-
-        a = line[0]
-        c = {"#": "dark_grey", "s": "yellow", "o": "green", "c": "green", " ": "white"}
-        f = a if a in c else " "
-        cprint(line, c[f])
-    print()
 
 def copy_files(args):
     """Copy files from source directory to target directory with specified manifest"""
