@@ -390,6 +390,10 @@ def main():
         if not args.filter_patterns and "_specified" in vars(args) and "filter" in args._specified:
             cprint(f"Warning: No valid patterns found in filter file '{args.filter}'.", "yellow")
 
+        # Check if running in the terminal, because editor is only available in terminal
+        if args.interactive and not sys.stdout.isatty():
+            cprint("Warning: Not running in the terminal (may be a redirect or pipe)", "yellow")
+
         if args.update_list:
             return update_file_list(args)
         else:
