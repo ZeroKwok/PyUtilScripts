@@ -170,6 +170,10 @@ def make_actions(args):
             items.append(('c', file, file2))
             continue
 
+        elif args.mode in ('o', 'overwrite'):
+            items.append(('o', file, ''))
+            continue
+
         diff = file_cmp(stat1, stat2)
         if diff > 0:
             items.append(('o', file, ''))
