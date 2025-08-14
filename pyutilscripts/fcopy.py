@@ -152,30 +152,29 @@ def increment_filename(directory, filename):
 
     return candidate
 
-def make_file_actions(args):
+def make_actions(args):
     items = []
     for file in args.manifest:
         source = os.path.normpath(os.path.join(args.source, file))
         target = os.path.normpath(os.path.join(args.target, file))
 
-        quotes = lambda n: f'"{n}"'
         stat1 = os.stat(source)
         try:
             stat2 = os.stat(target)
         except FileNotFoundError:
-            items.append(('c', quotes(file), ''))
+            items.append(('c', file, ''))
             continue
 
         if args.mode in ('r', 'rename'):
             file2 = increment_filename(args.target, file)
-            items.append(('c', quotes(file), quotes(file2)))
+            items.append(('c', file, file2))
             continue
 
         diff = file_cmp(stat1, stat2)
         if diff > 0:
-            items.append(('o', quotes(file), ''))
+            items.append(('o', file, ''))
         else:
-            items.append(('s', quotes(file), ''))
+            items.append(('s', file, ''))
     return natsorted(items)
 
 def parse_actions(lines, comment='#'):
@@ -207,7 +206,7 @@ def parse_actions(lines, comment='#'):
 def read_file_actions(filename, comment='#'):
     return parse_actions(read_file_list(filename, comment, True), comment)
 
-def get_available_editor(verbose, defaults=("micro", "nano", "vim", "vi", "notepad")):
+def get_available_editor(defaults=("micro", "nano", "vim", "vi", "notepad")):
     """检查哪个编辑器可用，返回第一个可用的，否则返回 None"""
     if "EDITOR" in os.environ:
         defaults.insert(0, os.environ["EDITOR"])
@@ -217,27 +216,45 @@ def get_available_editor(verbose, defaults=("micro", "nano", "vim", "vi", "notep
             return editor
     return None
 
+def join_actions(actions:list, header:str, verbose:int):
+    lines = []
+    for item in actions:
+        line = f'{item[0]}  "{item[1]}"'
+        if item[2]:
+            line += f' -> "{item[2]}"'
+        lines.append(line)
+    return header.rstrip() + "\n\n" + "\n".join(lines) + "\n"
+
 def edit_actions(actions:list, header:str, verbose:int) -> list:
     """
     使用 click.edit() 启动编辑器让用户编辑行动计划。
     返回: None 用户取消编辑或没保存
     """
-    lines = []
-    for item in actions:
-        line = f"{item[0]}  {item[1]}"
-        if item[2]:
-            line += f" -> {item[2]}"
-        lines.append(line)
-    content = header.rstrip() + "\n\n" + "\n".join(lines) + "\n"
+    content = join_actions(actions, header, verbose)
 
     # 打开编辑器让用户编辑内容
-    edited = click.edit(content, extension=".actions-todo", editor=get_available_editor(verbose))
+    edited = click.edit(content, extension=".actions-todo", editor=get_available_editor())
     if edited is None:
         cprint("User canceled or didn't save, aborted.", "red")
         raise SystemExit()
 
     # 解析用户编辑后的结果
     return parse_actions(edited.splitlines(), '#')
+
+def print_actions(actions:list, header:str, verbose:int):
+    print()
+    cprint(f"The following actions will be performed:", "yellow")
+    lines = join_actions(actions, header, verbose)
+    for line in lines.splitlines():
+        if not line:
+            print()
+            continue
+
+        a = line[0]
+        c = {"#": "dark_grey", "s": "yellow", "o": "green", "c": "green", " ": "white"}
+        f = a if a in c else " "
+        cprint(line, c[f])
+    print()
 
 def copy_files(args):
     """Copy files from source directory to target directory with specified manifest"""
@@ -249,8 +266,11 @@ def copy_files(args):
         raise SystemExit()
 
     # 生成文件操作列表
-    actions = make_file_actions(args)
-    actions = edit_actions(actions, ActionsFileHeader, args.verbose)
+    actions = make_actions(args)
+    if args.interactive:
+        actions = edit_actions(actions, ActionsFileHeader, args.verbose)
+    elif args.dry_run or args.verbose > 1:
+        print_actions(actions, ActionsFileHeader, args.verbose)
 
     copied, skipped = (0, 0)
     for item in actions:
@@ -263,13 +283,16 @@ def copy_files(args):
             target = os.path.normpath(os.path.join(args.target, item[2] if item[2] else item[1]))
 
             prefix = {'c' : 'Copy      ', 'o': 'Overwrite', 'r': 'Rename   '}[item[0]]
-            if args.verbose > 0:
+            if args.dry_run:
+                cprint(f"Dry run: {prefix}: {source} -> {target}", "cyan")
+            elif args.verbose > 0:
                 cprint(f"{prefix}: {source} -> {target}", 'green')
             else:
                 cprint(f"{prefix}: {item[1]}", 'green')
 
-            os.makedirs(os.path.dirname(target), exist_ok=True)
-            shutil.copy2(source, target)
+            if not args.dry_run:
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                shutil.copy2(source, target)
             copied += 1
     cprint(f"Done. {copied} files copied, {skipped} skipped.")
 
@@ -282,7 +305,8 @@ def main():
         parser.add_argument('-l', '--list', default='fcopy.list', help='File containing the list of files to copy.')
         parser.add_argument("-s", "--source", required=True, help="source directory containing files to copy")
         parser.add_argument("-t", "--target", help="target directory where files will be copied")
-        parser.add_argument("-m", "--mode", default="update", choices=CopyModes, help="copy mode: u|update, o|overwrite, r|rename, i|interactive")
+        parser.add_argument("-m", "--mode", default="update", choices=CopyModes, help="copy mode: u|update, o|overwrite, r|rename")
+        parser.add_argument("-i", "--interactive", action="store_true", help="Let the user edit the list of action plans to copy")
         parser.add_argument("-v", "--verbose", action="count", default=0, help="increase verbosity level (use -vv for more detail)")
         parser.add_argument("--update-list", action="store_true", help="update the --list file with current --source contents (with confirmation)")
         parser.add_argument("--dry-run", action="store_true", help="simulate operations without actually copying files")
