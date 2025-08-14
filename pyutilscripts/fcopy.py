@@ -158,7 +158,13 @@ def make_actions(args):
         source = os.path.normpath(os.path.join(args.source, file))
         target = os.path.normpath(os.path.join(args.target, file))
 
-        stat1 = os.stat(source)
+        try:
+            stat1 = os.stat(source)
+        except:
+            # 源文件不存在则发出警告, 不视为错误
+            cprint(f"Warn: SourceFileNotFound -> {source}", "magenta", file=sys.stderr)
+            continue
+
         try:
             stat2 = os.stat(target)
         except FileNotFoundError:
@@ -278,21 +284,27 @@ def copy_files(args):
 
     copied, skipped = (0, 0)
     for item in actions:
-        if item[0] == 's':
+        action, file1, file2 = item
+        if not file2:
+            file2 = file1
+
+        if action == 's':
             skipped += 1
             continue
 
-        if item[0] in ('c', 'o', 'r'):
-            source = os.path.normpath(os.path.join(args.source, item[1]))
-            target = os.path.normpath(os.path.join(args.target, item[2] if item[2] else item[1]))
+        if action in ('c', 'o', 'r'):
+            source = os.path.normpath(os.path.join(args.source, file1))
+            target = os.path.normpath(os.path.join(args.target, file2))
+            if os.path.isdir(source):
+                continue
 
-            prefix = {'c' : 'Copy      ', 'o': 'Overwrite', 'r': 'Rename   '}[item[0]]
+            prefix = {'c' : 'Copy      ', 'o': 'Overwrite', 'r': 'Rename   '}[action]
             if args.dry_run:
-                cprint(f"Dry run: {prefix}: {source} -> {target}", "cyan")
+                cprint(f"Dry run: {prefix}: {file1} -> {file2}", "cyan")
             elif args.verbose > 0:
-                cprint(f"{prefix}: {source} -> {target}", 'green')
+                cprint(f"{prefix}: {file1} -> {file2}", 'green')
             else:
-                cprint(f"{prefix}: {item[1]}", 'green')
+                cprint(f"{prefix}: {file1}", 'green')
 
             if not args.dry_run:
                 os.makedirs(os.path.dirname(target), exist_ok=True)
