@@ -120,7 +120,11 @@ def increment_filename(directory, filename):
     在指定目录中为给定文件名生成不冲突的新文件名（仅文件名部分，不含路径）。
     支持多扩展名（如 .tar.gz）及已有的 (1)、(2) 递增模式。
     """
-    directory = Path(directory)
+    directory  = Path(directory)
+    filename   = Path(filename)
+    components = filename.parent
+    filename   = filename.name
+    
     stem, *suffixes = filename.split('.')
     suffix = '.' + '.'.join(suffixes) if suffixes else ''
 
@@ -134,11 +138,11 @@ def increment_filename(directory, filename):
 
     # 初始候选
     candidate = filename
-    while (directory / candidate).exists():
+    while (directory / components / candidate).exists():
         number += 1
         candidate = f"{stem}({number}){suffix}"
 
-    return candidate
+    return os.path.join(components, candidate) 
 
 def make_actions(args):
     items = []
