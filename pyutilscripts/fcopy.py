@@ -7,33 +7,21 @@
 # For the full copyright and license information, please view the LICENSE
 # file that was distributed with this source code.
 #
-# ###
-#
-# 1. 以tree -aif命令输出的内容作为文件清单(如下).
-# 2. 通过脚本将(directory)原目录下的匹配文件, 拷贝到(output)目标目录.
-#
-# 语法如下
-# fcopy.py [-l,--list FILE] [-d,--directory DIRECTORY] <-o,--output DIRECTORY>
-#
-# CMD
-# python fcopy.py -l ../fcopy.list -d . -o "\\192.168.1.230\2024-01-26 1625"
 
 import os
 import re
 import sys
-import stat
 import shlex
 import click
 import shutil
-import filecmp
 import difflib
 import argparse
 import datetime
 import traceback
 from   pathlib import Path
 from   natsort import natsorted
-from   datetime import datetime, timezone
-from   termcolor import colored, cprint
+from   datetime import datetime
+from   termcolor import cprint
 
 CopyModes = ["update", "overwrite", "rename", "interactive", "u", "o", "r", "i"]
 
@@ -268,50 +256,39 @@ def print_actions(actions:list, header:str, verbose:int):
 
 def copy_files(args):
     """Copy files from source directory to target directory with specified manifest"""
-
-    # 读取清单
     args.manifest = read_file_list(args.list)
-    if args.manifest is None:
+    if not args.manifest:
         cprint('Error: list file is empty or invalid.', 'red')
         raise SystemExit()
-
-    # 生成文件操作列表
     actions = make_actions(args)
     if args.interactive:
         actions = edit_actions(actions, ActionsFileHeader, args.verbose)
     elif args.dry_run or args.verbose > 1:
         print_actions(actions, ActionsFileHeader, args.verbose)
-
-    copied, skipped = (0, 0)
-    for item in actions:
-        action, file1, file2 = item
-        if not file2:
-            file2 = file1
-
+    copied, skipped = 0, 0
+    for action, file1, file2 in actions:
+        file2 = file2 or file1
         if action == 's':
             skipped += 1
             continue
-
         if action in ('c', 'o', 'r'):
             source = os.path.normpath(os.path.join(args.source, file1))
             target = os.path.normpath(os.path.join(args.target, file2))
             if os.path.isdir(source):
                 continue
-
-            prefix = {'c': 'Copying  ', 
-                      'o': 'Replecing', 
-                      'u': 'Updating ', 
-                      'r': 'Renaming '}[action]
+            prefix = {'c': 'Copying', 'o': 'Replacing', 'u': 'Updating', 'r': 'Renaming'}[action]
             if args.dry_run:
                 cprint(f"Dry run: {prefix}: {file1} -> {file2}", "cyan")
             elif args.verbose > 0:
                 cprint(f"{prefix} {file1} -> {file2}", 'green')
             else:
                 cprint(f"{prefix} {file1}", 'green')
-
             if not args.dry_run:
-                os.makedirs(os.path.dirname(target), exist_ok=True)
-                shutil.copy2(source, target)
+                try:
+                    os.makedirs(os.path.dirname(target), exist_ok=True)
+                    shutil.copy2(source, target)
+                except OSError as e:
+                    cprint(f"Error copying {source} to {target}: {e}", "red")
             copied += 1
     cprint(f"Done. {copied} files copied, {skipped} skipped.")
     cprint(f"Destination: {args.target}")
