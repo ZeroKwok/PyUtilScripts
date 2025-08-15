@@ -298,19 +298,23 @@ def copy_files(args):
             if os.path.isdir(source):
                 continue
 
-            prefix = {'c' : 'Copy      ', 'o': 'Overwrite', 'r': 'Rename   '}[action]
+            prefix = {'c': 'Copying  ', 
+                      'o': 'Replecing', 
+                      'u': 'Updating ', 
+                      'r': 'Renaming '}[action]
             if args.dry_run:
                 cprint(f"Dry run: {prefix}: {file1} -> {file2}", "cyan")
             elif args.verbose > 0:
-                cprint(f"{prefix}: {file1} -> {file2}", 'green')
+                cprint(f"{prefix} {file1} -> {file2}", 'green')
             else:
-                cprint(f"{prefix}: {file1}", 'green')
+                cprint(f"{prefix} {file1}", 'green')
 
             if not args.dry_run:
                 os.makedirs(os.path.dirname(target), exist_ok=True)
                 shutil.copy2(source, target)
             copied += 1
     cprint(f"Done. {copied} files copied, {skipped} skipped.")
+    cprint(f"Destination: {args.target}")
 
 def main():
     try:
