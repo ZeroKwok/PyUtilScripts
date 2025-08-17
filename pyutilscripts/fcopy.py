@@ -115,7 +115,7 @@ def file_cmp(stat1, stat2):
     else:
         return -1
 
-def increment_filename(directory, filename):
+def increment_filename(directory, filename, rename_list):
     """
     在指定目录中为给定文件名生成不冲突的新文件名（仅文件名部分，不含路径）。
     支持多扩展名（如 .tar.gz）及已有的 (1)、(2) 递增模式。
@@ -136,16 +136,26 @@ def increment_filename(directory, filename):
     else:
         number = 0
 
+    # 除了判断文件系统中是否存在之外, 还要判断计划中产生的文件是否存在
+    def exists(d, c, f):
+        if (d / c / f).exists():
+            return True
+        if rename_list:
+            if (c / f) in rename_list:
+                return True
+        return False
+
     # 初始候选
     candidate = filename
-    while (directory / components / candidate).exists():
+    while exists(directory, components, candidate):
         number += 1
         candidate = f"{stem}({number}){suffix}"
 
-    return os.path.join(components, candidate) 
+    return components / candidate 
 
 def make_actions(args):
     items = []
+    rename_list = []
     for file in args.manifest:
         source = os.path.normpath(os.path.join(args.source, file))
         target = os.path.normpath(os.path.join(args.target, file))
@@ -164,8 +174,9 @@ def make_actions(args):
             continue
 
         if args.mode in ('r', 'rename'):
-            file2 = increment_filename(args.target, file)
-            items.append(('c', file, file2))
+            file2 = increment_filename(args.target, file, rename_list)
+            items.append(('c', file, str(file2)))
+            rename_list.append(file2)
             continue
 
         elif args.mode in ('o', 'overwrite'):
@@ -317,7 +328,7 @@ def main():
             args = parser.parse_args()
         except SystemExit:
             print('\n'.join(parser.format_help().splitlines()[1:]))
-            return
+            raise
 
         # argparse 默认会保留字符串中的引号
         for key in args.__dict__:
@@ -331,25 +342,27 @@ def main():
         if not args.list or not args.source:
             print("Error: Please provide the required arguments.")
             parser.print_help()
-            return
+            return 1
 
         args.mode = args.mode.lower()
         args.source = os.path.normpath(os.path.abspath(args.source))
         if not os.path.isdir(args.source):
             print(f"Error: Source directory '{args.source}' does not exist")
-            return
+            return 1
 
         if args.update_list:
             update_file_list(args)
         else:
             if args.target is None:
                 cprint(f"Error: Please provide the target directory.")
-                return
+                return 1
             args.target = os.path.normpath(os.path.abspath(args.target))
             copy_files(args)
 
+        return 0
     except KeyboardInterrupt:
         cprint('\nKeyboard Interrupt', 'red', end='')
+        return 1
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
