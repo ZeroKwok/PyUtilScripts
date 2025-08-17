@@ -55,12 +55,30 @@ def read_file_list(filename, comment='#', keep_comments=False):
         files.append(line)
     return files
 
-def make_file_list(source):
+def filter_match(file, patterns):
+    if not patterns:
+        return False
+    return any(p.match(file) for p in patterns)
+
+def read_file_filter(filename, comment='#'):
+    patterns = []
+    try:
+        for line in read_file_list(filename, comment, False) or []:
+            patterns.append(re.compile(line))
+    except FileNotFoundError:
+        pass # ignore missing file
+    return patterns
+
+def make_file_list(source, filters=[], verbose=False):
     files = []
     for root, _, names in os.walk(source):
         for n in names:
             filename = os.path.join(root, n)
             filename = os.path.relpath(filename, start=source)
+            if filter_match(filename, filters):
+                if verbose:
+                    cprint(f"Filtered: {filename}", "yellow")
+                continue
             files.append(filename)
 
     date = datetime.now().isoformat(timespec='seconds')
@@ -69,7 +87,7 @@ def make_file_list(source):
 
 def update_file_list(args):
     """Update the file list with the current contents of the source directory."""
-    new = make_file_list(args.source)
+    new = make_file_list(args.source, args.filter_patterns, args.verbose)
     old = []
     if os.path.exists(args.list):
         with open(args.list, 'r') as f:
@@ -157,9 +175,13 @@ def make_actions(args):
     items = []
     rename_list = []
     for file in args.manifest:
+        if filter_match(file, args.filter_patterns):
+            if args.verbose:
+                cprint(f"Filtered: {file}", "yellow")
+            continue
+
         source = os.path.normpath(os.path.join(args.source, file))
         target = os.path.normpath(os.path.join(args.target, file))
-
         try:
             stat1 = os.stat(source)
         except:
@@ -320,6 +342,7 @@ def main():
         parser.add_argument("-m", "--mode", default="update", choices=CopyModes, help="copy mode: u|update, o|overwrite, r|rename")
         parser.add_argument("-i", "--interactive", action="store_true", help="Let the user edit the list of action plans to copy")
         parser.add_argument("-v", "--verbose", action="count", default=0, help="increase verbosity level (use -vv for more detail)")
+        parser.add_argument('--filter', default='fcopy.filter', help='file containing blacklist regex patterns, one per line.')
         parser.add_argument("--update-list", action="store_true", help="update the --list file with current --source contents (with confirmation)")
         parser.add_argument("--dry-run", action="store_true", help="simulate operations without actually copying files")
         parser.add_argument('--debug', action='store_true', default=False, help=argparse.SUPPRESS)
@@ -340,15 +363,20 @@ def main():
             input('Wait for debugging and press Enter to continue...')
 
         if not args.list or not args.source:
-            print("Error: Please provide the required arguments.")
+            cprint("Error: Please provide the required arguments.", "red")
             parser.print_help()
             return 1
 
         args.mode = args.mode.lower()
         args.source = os.path.normpath(os.path.abspath(args.source))
         if not os.path.isdir(args.source):
-            print(f"Error: Source directory '{args.source}' does not exist")
+            cprint(f"Error: Source directory '{args.source}' does not exist", "red")
             return 1
+
+        # Read the filter file
+        args.filter_patterns = read_file_filter(args.filter)
+        if not args.filter_patterns and "_specified" in vars(args) and "filter" in args._specified:
+            cprint(f"Warning: No valid patterns found in filter file '{args.filter}'.", "yellow")
 
         if args.update_list:
             update_file_list(args)

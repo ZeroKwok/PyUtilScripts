@@ -12,3 +12,4 @@
   - [ ] r 重命名, 即目标存在, 拷贝并递增文件名(--mode rename)
 - [ ] fcopy --actions 清单支持行尾注释
 - [ ] fcopy --actions 清单 action 为 u 时, 添加两个文件的修改时间注释
+- [ ] fcopy --filter  添加正则匹配过滤
