@@ -118,11 +118,12 @@ def update_file_list(args):
     cprint(f"\nUpdate {args.list} with these changes? [y/N]", end=" ")
     confirm = input().strip().lower()
     if confirm != 'y':
-        cprint('User Cancelled', 'red')
-        raise SystemExit()
+        cprint('User Cancelled', "red", file=sys.stderr)
+        return 1
 
     with open(args.list, 'w') as f:
         f.write('\n'.join(new))
+    return 0
 
 def file_cmp(stat1, stat2):
     # 比较文件大小和修改时间
@@ -270,7 +271,7 @@ def edit_actions(actions:list, header:str, verbose:int) -> list:
     # 打开编辑器让用户编辑内容
     edited = click.edit(content, extension=".actions-todo", editor=get_available_editor())
     if edited is None:
-        cprint("User canceled or didn't save, aborted.", "red")
+        cprint("User canceled or didn't save, aborted.", "red", file=sys.stderr)
         raise SystemExit()
 
     # 解析用户编辑后的结果
@@ -295,24 +296,32 @@ def copy_files(args):
     """Copy files from source directory to target directory with specified manifest"""
     args.manifest = read_file_list(args.list)
     if not args.manifest:
-        cprint('Error: list file is empty or invalid.', 'red')
-        raise SystemExit()
+        cprint('Error: list file is empty or invalid.', "red", file=sys.stderr)
+        return 1
+
     actions = make_actions(args)
+    if not actions:
+        cprint("Error: No actions to perform.", "red", file=sys.stderr)
+        return 1
+
     if args.interactive:
         actions = edit_actions(actions, ActionsFileHeader, args.verbose)
     elif args.dry_run or args.verbose > 1:
         print_actions(actions, ActionsFileHeader, args.verbose)
+
     copied, skipped = 0, 0
     for action, file1, file2 in actions:
         file2 = file2 or file1
         if action == 's':
             skipped += 1
             continue
+
         if action in ('c', 'o', 'r'):
             source = os.path.normpath(os.path.join(args.source, file1))
             target = os.path.normpath(os.path.join(args.target, file2))
             if os.path.isdir(source):
                 continue
+
             prefix = {'c': 'Copying', 'o': 'Replacing', 'u': 'Updating', 'r': 'Renaming'}[action]
             if args.dry_run:
                 cprint(f"Dry run: {prefix}: {file1} -> {file2}", "cyan")
@@ -320,15 +329,18 @@ def copy_files(args):
                 cprint(f"{prefix} {file1} -> {file2}", 'green')
             else:
                 cprint(f"{prefix} {file1}", 'green')
+
             if not args.dry_run:
                 try:
                     os.makedirs(os.path.dirname(target), exist_ok=True)
                     shutil.copy2(source, target)
                 except OSError as e:
-                    cprint(f"Error copying {source} to {target}: {e}", "red")
+                    cprint(f"Error copying {source} to {target}: {e}", "red", file=sys.stderr)
             copied += 1
+
     cprint(f"Done. {copied} files copied, {skipped} skipped.")
     cprint(f"Destination: {args.target}")
+    return 0
 
 def main():
     try:
@@ -363,14 +375,14 @@ def main():
             input('Wait for debugging and press Enter to continue...')
 
         if not args.list or not args.source:
-            cprint("Error: Please provide the required arguments.", "red")
+            cprint("Error: Please provide the required arguments.", "red", file=sys.stderr)
             parser.print_help()
             return 1
 
         args.mode = args.mode.lower()
         args.source = os.path.normpath(os.path.abspath(args.source))
         if not os.path.isdir(args.source):
-            cprint(f"Error: Source directory '{args.source}' does not exist", "red")
+            cprint(f"Error: Source directory '{args.source}' does not exist", "red", file=sys.stderr)
             return 1
 
         # Read the filter file
@@ -379,15 +391,14 @@ def main():
             cprint(f"Warning: No valid patterns found in filter file '{args.filter}'.", "yellow")
 
         if args.update_list:
-            update_file_list(args)
+            return update_file_list(args)
         else:
             if args.target is None:
                 cprint(f"Error: Please provide the target directory.")
                 return 1
             args.target = os.path.normpath(os.path.abspath(args.target))
-            copy_files(args)
+            return copy_files(args)
 
-        return 0
     except KeyboardInterrupt:
         cprint('\nKeyboard Interrupt', 'red', end='')
         return 1
