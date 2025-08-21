@@ -14,3 +14,4 @@
 - [x] fcopy --actions 清单 action 为 u 时, 添加两个文件的修改时间注释
 - [x] fcopy --filter  添加正则匹配过滤
 - [ ] fcopy --actions 清单支持行尾注释
+- [ ] fcopy 增加严格模式, 避免在拷贝时源文件不存在, 导致结果不如预期

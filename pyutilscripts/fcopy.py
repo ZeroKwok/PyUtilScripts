@@ -40,7 +40,7 @@ ActionsFileHeader = """# Action plan for file copying (edit this file to change 
 # u - Update, when target exists with mismatched metadata but source is newer
 # o - Overwrite, when target exists, unconditionally copy and overwrite (--mode overwrite)
 # r - Rename, when target exists, copy with incremented filename (--mode rename)
-# i - Ignore, when target exists with mismatched metadata but deep comparison shows no difference
+# i - Ignore, when target exists with mismatched metadata but deep comparison shows no difference or source is older
 # s - Skip, when target exists and no differences found in shallow or deep comparison
 #
 # Example:
@@ -250,14 +250,18 @@ def make_actions(args):
 
         # update mode
         is_same, meta_cmp = file_cmp(source, target, stat1, stat2)
-        common = lambda: (
-            [
-                f"src: {utils.format_ftime(stat1.st_mtime)}, {utils.format_bytes(stat1.st_size)}",
-                f"dst: {utils.format_ftime(stat2.st_mtime)}, {utils.format_bytes(stat2.st_size)}"
-            ]
-            if meta_cmp != 0
-            else None
-        )
+        def common():
+            if args.verbose > 0:
+                return (
+                    [
+                        f"src: {utils.format_ftime(stat1.st_mtime)}, {utils.format_bytes(stat1.st_size)}",
+                        f"dst: {utils.format_ftime(stat2.st_mtime)}, {utils.format_bytes(stat2.st_size)}",
+                    ]
+                    if meta_cmp != 0
+                    else None
+                )
+            else:
+                return {0: None, 1: ["src newer",], -1: ["dst newer",]}[meta_cmp]
 
         if is_same:
             items.append(Action('s' if meta_cmp == 0 else 'i', file, common=common()))
@@ -301,10 +305,13 @@ def join_actions(actions:list[Action], header:str, verbose:int):
         line = f'{item.action}  "{item.src}"'
         if item.dst:
             line += f' -> "{item.dst}"'
+        if item.common and verbose <= 0:
+            line += f' # {",".join(item.common)}'
         lines.append(line)
 
-        for c in item.common or []:
-            lines.append(f'   # {c}')
+        if verbose > 0: # 注释以独立的行存在
+            for c in item.common or []:
+                lines.append(f'   # {c}')
 
     return header.rstrip() + "\n\n" + "\n".join(lines) + "\n"
 
