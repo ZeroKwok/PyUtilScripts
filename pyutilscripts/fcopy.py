@@ -280,11 +280,15 @@ def parse_actions(lines, comment='#'):
         # Handle action-prefixed lines (for edit mode)
         if ' ' not in line:
             raise ValueError(f"Invalid line: {row}: {line}")
+        fields = shlex.split(line, posix=os.name != 'nt')
 
-        if '->'in line:
-            fields = shlex.split(line, posix=os.name != 'nt')
-        else:
-            fields = line.split(maxsplit=1)
+        # remove comments fields
+        result = []
+        for f in fields:
+            if f.startswith(comment):
+                break
+            result.append(f)
+        fields = result
 
         if len(fields) == 2: 
             action, file1, file2 = fields + ['']
