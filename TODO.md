@@ -13,5 +13,6 @@
   - [x] r 重命名, 即目标存在, 拷贝并递增文件名(--mode rename)
 - [x] fcopy --actions 清单 action 为 u 时, 添加两个文件的修改时间注释
 - [x] fcopy --filter  添加正则匹配过滤
-- [ ] fcopy --actions 清单支持行尾注释
+- [x] fcopy --actions 清单支持行尾注释
 - [ ] fcopy 增加严格模式, 避免在拷贝时源文件不存在, 导致结果不如预期
+- [ ] fcopy --actions 清单添加原/目标目录, 与必要的注释
