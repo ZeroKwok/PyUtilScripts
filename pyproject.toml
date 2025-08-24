@@ -10,6 +10,7 @@ keywords = ["tools"]
 readme = "README.md"
 requires-python = ">=3.7"
 license = {text = "MIT License"}
+dynamic = ["version"]
 classifiers = [
     "Intended Audience :: Developers",
     "Topic :: Software Development :: Build Tools",
@@ -24,9 +25,16 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
 ]
 dependencies = [
+    "click",
+    "natsort",
     "termcolor",
 ]
-dynamic = ["version"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+]
 
 [tool.setuptools.dynamic]
 version = {attr = "pyutilscripts.projectVersion"}
