@@ -48,6 +48,9 @@ ActionsFileHeader = """# Action plan for file copying (edit this file to change 
 # r file3.txt -> file(3).txt    Copy and Rename to file(3).txt
 # o file2.txt                   Overwrite
 # s file2.txt                   Skipped because the files are the same
+#
+# Source Directory: {Source}
+# Target Directory: {Target}
 """
 
 def read_file_list(filename, comment='#', keep_comments=False):
@@ -303,26 +306,27 @@ def parse_actions(lines, comment='#'):
 def read_file_actions(filename, comment='#'):
     return parse_actions(read_file_list(filename, comment, True), comment)
 
-def join_actions(actions:list[Action], header:str, verbose:int):
+def join_actions(actions:list[Action], header:str, args):
     lines = []
     for item in actions:
         line = f'{item.action}  "{item.src}"'
         if item.dst:
             line += f' -> "{item.dst}"'
-        if item.common and verbose <= 0:
+        if item.common and args.verbose <= 0:
             line += f' # {",".join(item.common)}'
         lines.append(line)
 
-        if verbose > 0: # 注释以独立的行存在
+        if args.verbose > 0: # 注释以独立的行存在
             for c in item.common or []:
                 lines.append(f'   # {c}')
 
+    header = header.format(Source=args.source, Target=args.target)
     return header.rstrip() + "\n\n" + "\n".join(lines) + "\n"
 
-def print_actions(actions:list, header:str, verbose:int):
+def print_actions(actions:list, header:str, args):
     print()
     cprint(f"The following actions will be performed:", "yellow")
-    lines = join_actions(actions, header, verbose)
+    lines = join_actions(actions, header, args)
     for line in lines.splitlines():
         if not line:
             print()
@@ -344,12 +348,12 @@ def get_available_editor(defaults=("micro", "nano", "vim", "vi", "notepad")):
             return editor
     return None
 
-def edit_actions(actions:list, header:str, verbose:int) -> list:
+def edit_actions(actions:list, header:str, args) -> list:
     """
     使用 click.edit() 启动编辑器让用户编辑行动计划。
     返回: None 用户取消编辑或没保存
     """
-    content = join_actions(actions, header, verbose)
+    content = join_actions(actions, header, args)
 
     # 打开编辑器让用户编辑内容
     edited = click.edit(content, extension=".actions-todo", editor=get_available_editor())
@@ -373,9 +377,9 @@ def copy_files(args):
         return 1
 
     if args.interactive:
-        actions = edit_actions(actions, ActionsFileHeader, args.verbose)
+        actions = edit_actions(actions, ActionsFileHeader, args)
     elif args.dry_run or args.verbose > 1:
-        print_actions(actions, ActionsFileHeader, args.verbose)
+        print_actions(actions, ActionsFileHeader, args)
 
     copied, skipped = 0, 0
     for action, file1, file2 in actions:
