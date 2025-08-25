@@ -414,7 +414,7 @@ def print_actions(actions:list, head:str, args):
             output(2)
             continue
 
-        a = line[0]
+        a = line.strip()[0]
         c = {"#": "dark_grey", "s": "yellow", "o": "green", "c": "green", " ": "white"}
         f = a if a in c else " "
         output(2, line, c[f])
