@@ -57,6 +57,53 @@ ActionFileHead = """# Action plan for file copying (edit this file to change act
 
 ActionNames = {'c': 'Copying', 'u': 'Updating', 'o': 'Replacing', 'r': 'Renaming', 'i': 'Ignored', 's': 'Skipped'}
 
+def output(level, *args, **kwargs):
+    """
+    Output messages with specified level.
+    0 - error (red, stderr)
+    1 - warning (yellow, stderr) - can be treated as error in strict mode
+    2 - normal output (stdout)
+    3 - verbose (stdout, only when verbose enabled)
+    """
+
+    # Extract control parameters
+    verbose_mode = kwargs.pop('verbose', False)
+    strict_mode = kwargs.pop('strict', False)
+
+    # Handle verbose filtering
+    if level > 2 and not verbose_mode:
+        return
+
+    # Handle strict mode: upgrade warnings to errors
+    if level == 1 and strict_mode:
+        level = 0
+
+    # Add appropriate prefixes
+    if len(args) == 0:
+        args = ('',)
+
+    if level == 0:
+        args = ('Error: ' + args[0], *args[1:],)
+    elif level == 1:
+        args = ('Warning: ' + args[0], *args[1:],)
+
+    # Set output destination and color
+    if level == 0:
+        kwargs.setdefault('file', sys.stderr)
+        kwargs.setdefault('color', 'red')
+    elif level == 1:
+        kwargs.setdefault('file', sys.stderr)
+        kwargs.setdefault('color', 'yellow')
+    elif level == 2:
+        kwargs.setdefault('file', sys.stdout)
+    elif level == 3:
+        kwargs.setdefault('file', sys.stdout)
+        kwargs.setdefault('color', 'blue')  # Optional: different color for verbose
+
+    # Output the message
+    cprint(*args, **kwargs)
+
+
 def read_file_list(filename, comment='#', keep_comments=False):
     """Read the list of files to copy from the manifest file."""
     if filename is None:
@@ -73,10 +120,12 @@ def read_file_list(filename, comment='#', keep_comments=False):
         files.append(line)
     return files
 
+
 def filter_match(file, patterns):
     if not patterns:
         return False
     return any(p.match(file) for p in patterns)
+
 
 def read_file_filter(filename, comment='#'):
     patterns = []
@@ -87,6 +136,7 @@ def read_file_filter(filename, comment='#'):
         pass # ignore missing file
     return patterns
 
+
 def make_file_list(source, filters=[], verbose=False):
     files = []
     for root, _, names in os.walk(source):
@@ -94,14 +144,14 @@ def make_file_list(source, filters=[], verbose=False):
             filename = os.path.join(root, n)
             filename = os.path.relpath(filename, start=source)
             if filter_match(filename, filters):
-                if verbose:
-                    cprint(f"Filtered: {filename}", "yellow")
+                output(3, f"Filtered: {filename}", verbose=verbose)
                 continue
             files.append(filename)
 
     date = datetime.now().isoformat(timespec='seconds')
     head = ListFileHead.format(date).splitlines()
     return head + natsorted(files)
+
 
 def update_file_list(args):
     """Update the file list with the current contents of the source directory."""
@@ -136,12 +186,13 @@ def update_file_list(args):
     cprint(f"\nUpdate {args.list} with these changes? [y/N]", end=" ")
     confirm = input().strip().lower()
     if confirm != 'y':
-        cprint('User Cancelled', "red", file=sys.stderr)
+        output(0, 'User Cancelled')
         return 1
 
     with open(args.list, 'w') as f:
         f.write('\n'.join(new))
     return 0
+
 
 def file_cmp(file1, file2, stat1, stat2) -> Tuple[bool, int]:
     """Compare two files and return a tuple of (is_same, meta_cmp)."""
@@ -166,6 +217,7 @@ def file_cmp(file1, file2, stat1, stat2) -> Tuple[bool, int]:
     if stat1.st_size == stat2.st_size and _do_cmp(file1, file2):
         return True, meta_cmp
     return False, meta_cmp
+
 
 def increment_filename(directory, filename, rename_list):
     """
@@ -205,6 +257,7 @@ def increment_filename(directory, filename, rename_list):
 
     return components / candidate 
 
+
 class Action:
     """Action类用于描述操作行为"""
     def __init__(self, action: str, src: str, dst: str = '', common: str = None):
@@ -220,14 +273,14 @@ class Action:
         priority = {c: i for i,c in enumerate(['c', 'u', 'o', 'r', 'i', 's'])}
         return natsorted(actions, key=lambda a: (priority[a.action], a.src, a.dst))
 
+
 def make_actions(args):
     items: List[Action] = []
     rename_list: List[str] = []
 
     for file in args.manifest:
         if filter_match(file, args.filter_patterns):
-            if args.verbose:
-                cprint(f"Filtered: {file}", "yellow")
+            output(3, f"Filtered: {file}", verbose=args.verbose)
             continue
 
         source = os.path.normpath(os.path.join(args.source, file))
@@ -236,7 +289,7 @@ def make_actions(args):
             stat1 = os.stat(source)
         except:
             # 源文件不存在则发出警告, 不视为错误
-            cprint(f"Warn: SourceFileNotFound -> {source}", "magenta", file=sys.stderr)
+            output(1, f"SourceFileNotFound: {file}", strict=args.strict)
             continue
 
         try:
@@ -277,6 +330,7 @@ def make_actions(args):
 
     return Action.natsorted(items)
 
+
 def parse_actions(lines, comment='#'):
     files = []
     for row, line in enumerate(lines):
@@ -307,14 +361,17 @@ def parse_actions(lines, comment='#'):
 
     return files
 
+
 def read_file_actions(filename, comment='#'):
     return parse_actions(read_file_list(filename, comment, True), comment)
+
 
 def line_append_space(line, align=16, minLength=32):
     l = len(line)
     n = math.ceil(l / align) * align
     n = max(n, minLength)
     return line + max(n - l, 1) * ' '
+
 
 def join_actions(actions:list[Action], head:str, args):
     lines = []
@@ -346,20 +403,23 @@ def join_actions(actions:list[Action], head:str, args):
 
     return head.rstrip() + "\n" + body + "\n"
 
+
 def print_actions(actions:list, head:str, args):
-    print()
-    cprint(f"The following actions will be performed:", "yellow")
+    output(2)
+    output(2, f"The following actions will be performed:", "yellow")
+
     lines = join_actions(actions, head, args)
     for line in lines.splitlines():
         if not line:
-            print()
+            output(2)
             continue
 
         a = line[0]
         c = {"#": "dark_grey", "s": "yellow", "o": "green", "c": "green", " ": "white"}
         f = a if a in c else " "
-        cprint(line, c[f])
-    print()
+        output(2, line, c[f])
+    output(2)
+
 
 def get_available_editor(defaults=("micro", "nano", "vim", "vi", "notepad")):
     """检查哪个编辑器可用，返回第一个可用的，否则返回 None"""
@@ -371,6 +431,7 @@ def get_available_editor(defaults=("micro", "nano", "vim", "vi", "notepad")):
             return editor
     return None
 
+
 def edit_actions(actions:list, head:str, args) -> list:
     """
     使用 click.edit() 启动编辑器让用户编辑行动计划。
@@ -381,22 +442,23 @@ def edit_actions(actions:list, head:str, args) -> list:
     # 打开编辑器让用户编辑内容
     edited = click.edit(content, extension=".actions-todo", editor=get_available_editor())
     if edited is None:
-        cprint("User canceled or didn't save, aborted.", "red", file=sys.stderr)
+        output(0, "User canceled or didn't save, aborted.")
         raise SystemExit()
 
     # 解析用户编辑后的结果
     return parse_actions(edited.splitlines(), '#')
 
+
 def copy_files(args):
     """Copy files from source directory to target directory with specified manifest"""
     args.manifest = read_file_list(args.list)
     if not args.manifest:
-        cprint('Error: list file is empty or invalid.', "red", file=sys.stderr)
+        output(0, 'list file is empty or invalid.')
         return 1
 
     actions = make_actions(args)
     if not actions:
-        cprint("Error: No actions to perform.", "red", file=sys.stderr)
+        output(0, "Error: No actions to perform.")
         return 1
 
     if args.interactive:
@@ -419,22 +481,23 @@ def copy_files(args):
 
             prefix = ActionNames[action]
             if args.dry_run:
-                cprint(f"Dry run: {prefix}: {file1} -> {file2}", "cyan")
+                output(2, f"Dry run: {prefix}: {file1} -> {file2}", "cyan")
             elif args.verbose > 0:
-                cprint(f"{prefix} {file1} -> {file2}", 'green')
+                output(2, f"{prefix} {file1} -> {file2}", 'green')
             else:
-                cprint(f"{prefix} {file1}", 'green')
+                output(2, f"{prefix} {file1}", 'green')
 
             if not args.dry_run:
                 try:
                     os.makedirs(os.path.dirname(target), exist_ok=True)
                     shutil.copy2(source, target)
                 except OSError as e:
-                    cprint(f"Error copying {source} to {target}: {e}", "red", file=sys.stderr)
+                    output(0, f"Copying {source} to {target}: {e}")
             copied += 1
 
-    cprint(f"Done. {copied} files copied, {skipped} skipped.")
+    output(2, f"Done. {copied} files copied, {skipped} skipped.")
     return 0
+
 
 def main():
     try:
@@ -451,6 +514,7 @@ def main():
         parser.add_argument('--filter', default='fcopy.filter', help='file containing blacklist regex patterns, one per line.')
         parser.add_argument("--update-list", action="store_true", help="update the --list file with current --source contents (with confirmation)")
         parser.add_argument("--dry-run", action="store_true", help="simulate operations without actually copying files")
+        parser.add_argument("--strict", action="store_true", help="treat warnings as errors (exit with non-zero code on warnings)")
         parser.add_argument('--debug', action='store_true', default=False, help=argparse.SUPPRESS)
 
         try:
@@ -469,36 +533,36 @@ def main():
             input('Wait for debugging and press Enter to continue...')
 
         if not args.list or not args.source:
-            cprint("Error: Please provide the required arguments.", "red", file=sys.stderr)
+            output(0, "Please provide the required arguments.")
             parser.print_help()
             return 1
 
         args.mode = args.mode.lower()
         args.source = os.path.normpath(os.path.abspath(args.source))
         if not os.path.isdir(args.source):
-            cprint(f"Error: Source directory '{args.source}' does not exist", "red", file=sys.stderr)
+            output(0, f"Source directory '{args.source}' does not exist")
             return 1
 
         # Read the filter file
         args.filter_patterns = read_file_filter(args.filter)
         if not args.filter_patterns and "_specified" in vars(args) and "filter" in args._specified:
-            cprint(f"Warning: No valid patterns found in filter file '{args.filter}'.", "yellow")
+            output(1, f"No valid patterns found in filter file '{args.filter}'.", strict=args.strict)
 
         # Check if running in the terminal, because editor is only available in terminal
         if args.interactive and not sys.stdout.isatty():
-            cprint("Warning: Not running in the terminal (may be a redirect or pipe)", "yellow")
+            output(1, "Not running in the terminal (may be a redirect or pipe)", strict=args.strict)
 
         if args.update_list:
             return update_file_list(args)
         else:
             if args.target is None:
-                cprint(f"Error: Please provide the target directory.")
+                output(0, "Please provide the target directory.")
                 return 1
             args.target = os.path.normpath(os.path.abspath(args.target))
             return copy_files(args)
 
     except KeyboardInterrupt:
-        cprint('\nKeyboard Interrupt', 'red', end='')
+        output(0, "\nKeyboard Interrupt", end='')
         return 1
 
 if __name__ == "__main__":
