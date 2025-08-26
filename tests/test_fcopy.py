@@ -23,6 +23,7 @@ def dircmp(dir1, dir2):
         len(result.left_only) == 0
         and len(result.right_only) == 0
         and len(result.diff_files) == 0 ):
+        print(f"Directory comparison failed: {result.left_only}, {result.right_only}, {result.diff_files}")
         return False
     for dir in result.common_dirs:
         if not dircmp(os.path.join(dir1, dir), os.path.join(dir2, dir)):
