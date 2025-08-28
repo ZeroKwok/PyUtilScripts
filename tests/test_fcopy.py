@@ -36,7 +36,7 @@ def test_update_list(monkeypatch, file_manifest):
 
 def test_copy_files_with_update_and_rename(monkeypatch, file_manifest):
     target = tempfile.mktemp()
-    monkeypatch.setattr(sys, "argv", ["fcopy.py", "-s", ".", "-l", file_manifest, "-t", target])
+    monkeypatch.setattr(sys, "argv", ["fcopy.py", "-s", ".", "-l", file_manifest, "-t", target, "-vv"])
     code = fcopy.main()
     assert code == 0
 

@@ -11,6 +11,7 @@
 import os
 import re
 import sys
+import stat
 import math
 import shlex
 import click
@@ -43,6 +44,7 @@ ActionFileHead = """# Action plan for file copying (edit this file to change act
 # u - Update, when target exists with mismatched metadata but source is newer
 # o - Overwrite, when target exists, unconditionally copy and overwrite (--mode overwrite)
 # r - Rename, when target exists, copy with incremented filename (--mode rename)
+# m - Make directory, when target is a directory and doesn't exist
 # i - Ignore, when target exists with mismatched metadata but deep comparison shows no difference or source is older
 # s - Skip, when target exists and no differences found in shallow or deep comparison
 #
@@ -57,7 +59,8 @@ ActionFileHead = """# Action plan for file copying (edit this file to change act
 # Action Count    : {Count}
 """
 
-ActionNames = {'c': 'Copying', 'u': 'Updating', 'o': 'Replacing', 'r': 'Renaming', 'i': 'Ignored', 's': 'Skipped'}
+ActionNames = {'c': 'Copying', 'u': 'Updating', 'o': 'Replacing',
+               'r': 'Renaming', 'm': 'MakingDir', 'i': 'Ignored', 's': 'Skipped'}
 
 def output(level, *args, **kwargs):
     """
@@ -278,7 +281,7 @@ class Action:
         return iter((self.action, self.src, self.dst))
 
     def natsorted(actions):
-        priority = {c: i for i,c in enumerate(['c', 'u', 'o', 'r', 'i', 's'])}
+        priority = {c: i for i,c in enumerate(['m', 'c', 'u', 'o', 'r', 'i', 's'])}
         return natsorted(actions, key=lambda a: (priority[a.action], a.src, a.dst))
 
 
@@ -303,7 +306,13 @@ def make_actions(args):
         try:
             stat2 = os.stat(target)
         except FileNotFoundError:
-            items.append(Action('c', file))
+            if stat.S_ISDIR(stat1.st_mode):
+                items.append(Action('m', file))
+            else:
+                items.append(Action('c', file))
+            continue
+
+        if stat.S_ISDIR(stat1.st_mode): # 目录直接跳过, 因为拷贝文件会尝试创建目录
             continue
 
         if args.mode in ('r', 'rename'):
@@ -423,7 +432,8 @@ def print_actions(actions:list, head:str, args):
             continue
 
         a = line.strip()[0]
-        c = {"#": "dark_grey", "s": "yellow", "o": "green", "c": "green", " ": "white"}
+        c = {"#": "dark_grey", "s": "yellow", "o": "green",
+             "c": "green", "m": "cyan", " ": "white"}
         f = a if a in c else " "
         output(2, line, c[f])
     output(2)
@@ -477,13 +487,14 @@ def copy_files(args):
     copied, skipped = 0, 0
     for action, file1, file2 in actions:
         file2 = file2 or file1
-        if action == 's':
+        if action in ('s', 'i'):
             skipped += 1
             continue
 
+        source = os.path.normpath(os.path.join(args.source, file1))
+        target = os.path.normpath(os.path.join(args.target, file2))
+
         if action in ('c', 'u', 'o', 'r'):
-            source = os.path.normpath(os.path.join(args.source, file1))
-            target = os.path.normpath(os.path.join(args.target, file2))
             if os.path.isdir(source):
                 continue
 
@@ -500,7 +511,18 @@ def copy_files(args):
                     os.makedirs(os.path.dirname(target), exist_ok=True)
                     shutil.copy2(source, target)
                 except OSError as e:
-                    output(0, f"Copying {source} to {target}: {e}")
+                    output(0, f"{prefix} {source} to {target}: {e}")
+                    if args.strict:
+                        return 1
+            copied += 1
+
+        elif action == 'm':
+            try:
+                os.makedirs(target, exist_ok=True)
+            except OSError as e:
+                output(0, f"{prefix} {source} to {target}: {e}")
+                if args.strict:
+                    return 1
             copied += 1
 
     output(2, f"Done. {copied} files copied, {skipped} skipped.")
