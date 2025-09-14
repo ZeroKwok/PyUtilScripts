@@ -290,12 +290,14 @@ def make_actions(args):
     rename_list: List[str] = []
 
     for file in args.manifest:
-        if filter_match(file, args.filter_patterns):
-            output(3, f"Filtered: {file}", verbose=args.verbose)
-            continue
-
         source = os.path.normpath(os.path.join(args.source, file))
         target = os.path.normpath(os.path.join(args.target, file))
+
+        # 过滤掉名单中的文件
+        if filter_match(source, args.filter_patterns):
+            output(2, f"Filtered: {file}", verbose=args.verbose)
+            continue
+
         try:
             stat1 = os.stat(source)
         except:
