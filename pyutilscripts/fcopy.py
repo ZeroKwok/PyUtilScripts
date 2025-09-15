@@ -543,7 +543,7 @@ def main():
         parser.add_argument("-m", "--mode", default="update", choices=CopyModes, help="copy mode: u|update, o|overwrite, r|rename")
         parser.add_argument("-i", "--interactive", action="store_true", help="Let the user edit the list of action plans to copy")
         parser.add_argument("-v", "--verbose", action="count", default=0, help="increase verbosity level (use -vv for more detail)")
-        parser.add_argument('--filter', default='fcopy.filter', help='file containing blacklist regex patterns, one per line (default: fcopy.filter).')
+        parser.add_argument('--filter', help='file containing blacklist regex patterns, one per line.')
         parser.add_argument("--update-list", action="store_true", help="update the --list file with current --source contents (with confirmation)")
         parser.add_argument("--dry-run", action="store_true", help="simulate operations without actually copying files")
         parser.add_argument("--strict", action="store_true", help="treat warnings as errors (exit with non-zero code on warnings)")
