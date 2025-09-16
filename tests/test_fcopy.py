@@ -69,7 +69,7 @@ def test_update_list_with_filter(monkeypatch, file_manifest):
     called = {}
     def fake_read_file_filter(args):
         called['ok'] = True
-        return [re.compile(line) for line in ['^file.txt$', '^.+__pycache__.+$', '^\.git.+$']]
+        return [re.compile(line) for line in ['^file.txt$', '^.+?__pycache__.+$', '^\.git.+$']]
     monkeypatch.setattr("pyutilscripts.fcopy.read_file_filter", fake_read_file_filter)
     code = fcopy.main()
     assert code == 0
@@ -79,7 +79,7 @@ def test_update_list_with_filter(monkeypatch, file_manifest):
     right = fcopy.read_file_list(manifest)
     diff = set(left) - set(right)
     assert diff
-    assert 'file.txt' in diff
+    assert [f for f in diff if '__pycache__' in f]
     assert len(diff) > 2
 
 def test_copy_files_with_filter(monkeypatch, file_manifest):
