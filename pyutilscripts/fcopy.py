@@ -21,11 +21,11 @@ import filecmp
 import argparse
 import datetime
 import traceback
-from   typing import Tuple, List
-from   pathlib import Path
-from   natsort import natsorted
-from   datetime import datetime
-from   termcolor import cprint
+from typing import Tuple, List
+from pathlib import Path
+from natsort import natsorted
+from datetime import datetime
+from termcolor import cprint
 
 from . import utils
 
@@ -59,8 +59,16 @@ ActionFileHead = """# Action plan for file copying (edit this file to change act
 # Action Count    : {Count}
 """
 
-ActionNames = {'c': 'Copying', 'u': 'Updating', 'o': 'Replacing',
-               'r': 'Renaming', 'm': 'MakingDir', 'i': 'Ignored', 's': 'Skipped'}
+ActionNames = {
+    "c": "Copying",
+    "u": "Updating",
+    "o": "Replacing",
+    "r": "Renaming",
+    "m": "MakingDir",
+    "i": "Ignored",
+    "s": "Skipped",
+}
+
 
 def output(level, *args, **kwargs):
     """
@@ -72,8 +80,8 @@ def output(level, *args, **kwargs):
     """
 
     # Extract control parameters
-    verbose_mode = kwargs.pop('verbose', False)
-    strict_mode = kwargs.pop('strict', False)
+    verbose_mode = kwargs.pop("verbose", False)
+    strict_mode = kwargs.pop("strict", False)
 
     # Handle verbose filtering
     if level > 2 and not verbose_mode:
@@ -85,35 +93,41 @@ def output(level, *args, **kwargs):
 
     # Add appropriate prefixes
     if len(args) == 0:
-        args = ('',)
+        args = ("",)
 
     if level == 0:
-        args = ('Error: ' + args[0], *args[1:],)
+        args = (
+            "Error: " + args[0],
+            *args[1:],
+        )
     elif level == 1:
-        args = ('Warning: ' + args[0], *args[1:],)
+        args = (
+            "Warning: " + args[0],
+            *args[1:],
+        )
 
     # Set output destination and color
     if level == 0:
-        kwargs.setdefault('file', sys.stderr)
-        kwargs.setdefault('color', 'red')
+        kwargs.setdefault("file", sys.stderr)
+        kwargs.setdefault("color", "red")
     elif level == 1:
-        kwargs.setdefault('file', sys.stderr)
-        kwargs.setdefault('color', 'yellow')
+        kwargs.setdefault("file", sys.stderr)
+        kwargs.setdefault("color", "yellow")
     elif level == 2:
-        kwargs.setdefault('file', sys.stdout)
+        kwargs.setdefault("file", sys.stdout)
     elif level == 3:
-        kwargs.setdefault('file', sys.stdout)
-        kwargs.setdefault('color', 'blue')  # Optional: different color for verbose
+        kwargs.setdefault("file", sys.stdout)
+        kwargs.setdefault("color", "blue")  # Optional: different color for verbose
 
     # Output the message
     cprint(*args, **kwargs)
 
 
-def read_file_list(filename, comment='#', keep_comments=False):
+def read_file_list(filename, comment="#", keep_comments=False):
     """Read the list of files to copy from the manifest file."""
     if filename is None:
         return None
-    with open(filename, 'r') as f:
+    with open(filename, "r") as f:
         lines = [line.strip() for line in f.readlines()]
 
     # Filter out comments and empty lines
@@ -132,13 +146,13 @@ def filter_match(file, patterns):
     return any(p.match(file) for p in patterns)
 
 
-def read_file_filter(filename, comment='#'):
+def read_file_filter(filename, comment="#"):
     patterns = []
     try:
         for line in read_file_list(filename, comment, False) or []:
             patterns.append(re.compile(line))
     except FileNotFoundError:
-        pass # ignore missing file
+        pass  # ignore missing file
     return patterns
 
 
@@ -158,10 +172,10 @@ def make_file_list(source, filters=[], verbose=False):
         handle_files(dirs, root, _dirs)
         handle_files(files, root, _files)
 
-    date = datetime.now().isoformat(timespec='seconds')
-    info = f'{len(dirs)} directories, {len(files)} files'
+    date = datetime.now().isoformat(timespec="seconds")
+    info = f"{len(dirs)} directories, {len(files)} files"
     head = ListFileHead.format(Date=date, Source=source, Count=info).splitlines()
-    return head + [''] + natsorted(dirs + files)
+    return head + [""] + natsorted(dirs + files)
 
 
 def update_file_list(args):
@@ -169,39 +183,39 @@ def update_file_list(args):
     new = make_file_list(args.source, args.filter_patterns, args.verbose)
     old = []
     if os.path.exists(args.list):
-        with open(args.list, 'r') as f:
+        with open(args.list, "r") as f:
             old = [line.strip() for line in f.readlines()]
 
     # 生成 unified diff
     diff = difflib.unified_diff(
         old,
         new,
-        fromfile=args.list + ' (old)',
-        tofile=args.list + ' (new)',
-        lineterm=''
+        fromfile=args.list + " (old)",
+        tofile=args.list + " (new)",
+        lineterm="",
     )
 
     # 对 diff 行进行彩色渲染
-    print('')
+    print("")
     for line in diff:
-        if line.startswith('+'):
-            cprint(line, 'green')  # 新增行：绿色
-        elif line.startswith('-'):
-            cprint(line, 'red')    # 删除行：红色
-        elif line.startswith('@@'):
-            cprint(line, 'cyan')   # 差异位置标记：青色
+        if line.startswith("+"):
+            cprint(line, "green")  # 新增行：绿色
+        elif line.startswith("-"):
+            cprint(line, "red")  # 删除行：红色
+        elif line.startswith("@@"):
+            cprint(line, "cyan")  # 差异位置标记：青色
         else:
             cprint(line)
 
     # Ask for confirmation
     cprint(f"\nUpdate {args.list} with these changes? [y/N]", end=" ")
     confirm = input().strip().lower()
-    if confirm != 'y':
-        output(0, 'User Cancelled')
+    if confirm != "y":
+        output(0, "User Cancelled")
         return 1
 
-    with open(args.list, 'w') as f:
-        f.write('\n'.join(new))
+    with open(args.list, "w") as f:
+        f.write("\n".join(new))
     return 0
 
 
@@ -216,8 +230,8 @@ def file_cmp(file1, file2, stat1, stat2) -> Tuple[bool, int]:
 
     # 深比较
     def _do_cmp(f1, f2):
-        bufsize = 8*1024
-        with open(f1, 'rb') as fp1, open(f2, 'rb') as fp2:
+        bufsize = 8 * 1024
+        with open(f1, "rb") as fp1, open(f2, "rb") as fp2:
             while True:
                 b1 = fp1.read(bufsize)
                 b2 = fp2.read(bufsize)
@@ -225,6 +239,7 @@ def file_cmp(file1, file2, stat1, stat2) -> Tuple[bool, int]:
                     return False
                 if not b1:
                     return True
+
     if stat1.st_size == stat2.st_size and _do_cmp(file1, file2):
         return True, meta_cmp
     return False, meta_cmp
@@ -235,16 +250,16 @@ def increment_filename(directory, filename, rename_list):
     在指定目录中为给定文件名生成不冲突的新文件名（仅文件名部分，不含路径）。
     支持多扩展名（如 .tar.gz）及已有的 (1)、(2) 递增模式。
     """
-    directory  = Path(directory)
-    filename   = Path(filename)
+    directory = Path(directory)
+    filename = Path(filename)
     components = filename.parent
-    filename   = filename.name
-    
-    stem, *suffixes = filename.split('.')
-    suffix = '.' + '.'.join(suffixes) if suffixes else ''
+    filename = filename.name
+
+    stem, *suffixes = filename.split(".")
+    suffix = "." + ".".join(suffixes) if suffixes else ""
 
     # 若 stem 形如 "file(1)"，则提取基础名与编号
-    match = re.match(r'^(.*?)(\((\d+)\))?$', stem )
+    match = re.match(r"^(.*?)(\((\d+)\))?$", stem)
     if match:
         stem = match.group(1)
         number = int(match.group(3)) if match.group(3) else 0
@@ -266,12 +281,13 @@ def increment_filename(directory, filename, rename_list):
         number += 1
         candidate = f"{stem}({number}){suffix}"
 
-    return components / candidate 
+    return components / candidate
 
 
 class Action:
     """Action类用于描述操作行为"""
-    def __init__(self, action: str, src: str, dst: str = '', common: str = None):
+
+    def __init__(self, action: str, src: str, dst: str = "", common: str = None):
         self.action = action
         self.src = src
         self.dst = dst
@@ -281,7 +297,7 @@ class Action:
         return iter((self.action, self.src, self.dst))
 
     def natsorted(actions):
-        priority = {c: i for i,c in enumerate(['m', 'c', 'u', 'o', 'r', 'i', 's'])}
+        priority = {c: i for i, c in enumerate(["m", "c", "u", "o", "r", "i", "s"])}
         return natsorted(actions, key=lambda a: (priority[a.action], a.src, a.dst))
 
 
@@ -309,26 +325,27 @@ def make_actions(args):
             stat2 = os.stat(target)
         except FileNotFoundError:
             if stat.S_ISDIR(stat1.st_mode):
-                items.append(Action('m', file))
+                items.append(Action("m", file))
             else:
-                items.append(Action('c', file))
+                items.append(Action("c", file))
             continue
 
-        if stat.S_ISDIR(stat1.st_mode): # 目录直接跳过, 因为拷贝文件会尝试创建目录
+        if stat.S_ISDIR(stat1.st_mode):  # 目录直接跳过, 因为拷贝文件会尝试创建目录
             continue
 
-        if args.mode in ('r', 'rename'):
+        if args.mode in ("r", "rename"):
             file2 = increment_filename(args.target, file, rename_list)
-            items.append(Action('c', file, str(file2)))
+            items.append(Action("c", file, str(file2)))
             rename_list.append(file2)
             continue
 
-        elif args.mode in ('o', 'overwrite'):
-            items.append(Action('o', file))
+        elif args.mode in ("o", "overwrite"):
+            items.append(Action("o", file))
             continue
 
         # update mode
         is_same, meta_cmp = file_cmp(source, target, stat1, stat2)
+
         def common():
             if args.verbose > 0:
                 return (
@@ -340,17 +357,25 @@ def make_actions(args):
                     else None
                 )
             else:
-                return {0: None, 1: ["src newer",], -1: ["dst newer",]}[meta_cmp]
+                return {
+                    0: None,
+                    1: [
+                        "src newer",
+                    ],
+                    -1: [
+                        "dst newer",
+                    ],
+                }[meta_cmp]
 
         if is_same:
-            items.append(Action('s' if meta_cmp == 0 else 'i', file, common=common()))
+            items.append(Action("s" if meta_cmp == 0 else "i", file, common=common()))
         else:
-            items.append(Action('u' if meta_cmp >= 1 else 'i', file, common=common()))
+            items.append(Action("u" if meta_cmp >= 1 else "i", file, common=common()))
 
     return Action.natsorted(items)
 
 
-def parse_actions(lines, comment='#'):
+def parse_actions(lines, comment="#"):
     files = []
     for row, line in enumerate(lines):
         line = line.strip()
@@ -358,9 +383,9 @@ def parse_actions(lines, comment='#'):
             continue
 
         # Handle action-prefixed lines (for edit mode)
-        if ' ' not in line:
+        if " " not in line:
             raise ValueError(f"Invalid line: {row}: {line}")
-        fields = shlex.split(line, posix=os.name != 'nt')
+        fields = shlex.split(line, posix=os.name != "nt")
 
         # remove comments fields
         result = []
@@ -370,18 +395,18 @@ def parse_actions(lines, comment='#'):
             result.append(f)
         fields = result
 
-        if len(fields) == 2: 
-            action, file1, file2 = fields + ['']
-        elif len(fields) == 4 and '->' in fields:
+        if len(fields) == 2:
+            action, file1, file2 = fields + [""]
+        elif len(fields) == 4 and "->" in fields:
             action, file1, _, file2 = fields
         else:
             raise ValueError(f"Invalid line: {row}: {line}, parse as: {fields}")
-        files.append(Action(action, file1.strip(' \'"'), file2.strip(' \'"')))
+        files.append(Action(action, file1.strip(" '\""), file2.strip(" '\"")))
 
     return files
 
 
-def read_file_actions(filename, comment='#'):
+def read_file_actions(filename, comment="#"):
     return parse_actions(read_file_list(filename, comment, True), comment)
 
 
@@ -389,19 +414,19 @@ def line_append_space(line, align=16, minLength=32):
     l = len(line)
     n = math.ceil(l / align) * align
     n = max(n, minLength)
-    return line + max(n - l, 1) * ' '
+    return line + max(n - l, 1) * " "
 
 
-def join_actions(actions:list[Action], head:str, args):
+def join_actions(actions: list[Action], head: str, args):
     lines = []
-    current = ''
+    current = ""
     counter = {}
     for item in actions:
         # 统计
         if current != item.action:
             current = item.action
             counter[item.action] = 0
-            lines.append('')
+            lines.append("")
             lines.append(f"# {ActionNames[item.action]} Files: {{{item.action}}}")
         counter[item.action] += 1
 
@@ -412,9 +437,9 @@ def join_actions(actions:list[Action], head:str, args):
             line = line_append_space(line) + f'# {",".join(item.common)}'
         lines.append(line)
 
-        if args.verbose > 0: # 注释以独立的行存在
+        if args.verbose > 0:  # 注释以独立的行存在
             for c in item.common or []:
-                lines.append(f'   # {c}')
+                lines.append(f"   # {c}")
     info = str(counter).replace("'", "")
     head = head.format(Source=args.source, Target=args.target, Count=info)
     body = "\n".join(lines)
@@ -423,7 +448,7 @@ def join_actions(actions:list[Action], head:str, args):
     return head.rstrip() + "\n" + body + "\n"
 
 
-def print_actions(actions:list, head:str, args):
+def print_actions(actions: list, head: str, args):
     output(2)
     output(2, f"The following actions will be performed:", "yellow")
 
@@ -434,8 +459,14 @@ def print_actions(actions:list, head:str, args):
             continue
 
         a = line.strip()[0]
-        c = {"#": "dark_grey", "s": "yellow", "o": "green",
-             "c": "green", "m": "cyan", " ": "white"}
+        c = {
+            "#": "dark_grey",
+            "s": "yellow",
+            "o": "green",
+            "c": "green",
+            "m": "cyan",
+            " ": "white",
+        }
         f = a if a in c else " "
         output(2, line, c[f])
     output(2)
@@ -445,14 +476,14 @@ def get_available_editor(defaults=("micro", "nano", "vim", "vi", "notepad")):
     """检查哪个编辑器可用，返回第一个可用的，否则返回 None"""
     if "EDITOR" in os.environ:
         defaults.insert(0, os.environ["EDITOR"])
-        cprint(f'Preferred editor detected: {defaults[0]}', 'yellow')
+        cprint(f"Preferred editor detected: {defaults[0]}", "yellow")
     for editor in defaults:
         if shutil.which(editor):  # 检查是否在 PATH 里
             return editor
     return None
 
 
-def edit_actions(actions:list, head:str, args) -> list:
+def edit_actions(actions: list, head: str, args) -> list:
     """
     使用 click.edit() 启动编辑器让用户编辑行动计划。
     返回: None 用户取消编辑或没保存
@@ -460,20 +491,22 @@ def edit_actions(actions:list, head:str, args) -> list:
     content = join_actions(actions, head, args)
 
     # 打开编辑器让用户编辑内容
-    edited = click.edit(content, extension=".actions-todo", editor=get_available_editor())
+    edited = click.edit(
+        content, extension=".actions-todo", editor=get_available_editor()
+    )
     if edited is None:
         output(0, "User canceled or didn't save, aborted.")
         raise SystemExit()
 
     # 解析用户编辑后的结果
-    return parse_actions(edited.splitlines(), '#')
+    return parse_actions(edited.splitlines(), "#")
 
 
 def copy_files(args):
     """Copy files from source directory to target directory with specified manifest"""
     args.manifest = read_file_list(args.list)
     if not args.manifest:
-        output(0, 'list file is empty or invalid.')
+        output(0, "list file is empty or invalid.")
         return 1
 
     actions = make_actions(args)
@@ -489,14 +522,14 @@ def copy_files(args):
     copied, skipped = 0, 0
     for action, file1, file2 in actions:
         file2 = file2 or file1
-        if action in ('s', 'i'):
+        if action in ("s", "i"):
             skipped += 1
             continue
 
         source = os.path.normpath(os.path.join(args.source, file1))
         target = os.path.normpath(os.path.join(args.target, file2))
 
-        if action in ('c', 'u', 'o', 'r'):
+        if action in ("c", "u", "o", "r"):
             if os.path.isdir(source):
                 continue
 
@@ -504,9 +537,9 @@ def copy_files(args):
             if args.dry_run:
                 output(2, f"Dry run: {prefix}: {file1} -> {file2}", "cyan")
             elif args.verbose > 0:
-                output(2, f"{prefix} {file1} -> {file2}", 'green')
+                output(2, f"{prefix} {file1} -> {file2}", "green")
             else:
-                output(2, f"{prefix} {file1}", 'green')
+                output(2, f"{prefix} {file1}", "green")
 
             if not args.dry_run:
                 try:
@@ -518,7 +551,7 @@ def copy_files(args):
                         return 1
             copied += 1
 
-        elif action == 'm':
+        elif action == "m":
             try:
                 os.makedirs(target, exist_ok=True)
             except OSError as e:
@@ -534,35 +567,83 @@ def copy_files(args):
 def main():
     try:
         parser = argparse.ArgumentParser(
-            description="Copy files from source directory to target directory with flexible copy modes.", 
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-        parser = argparse.ArgumentParser(description='Copy files from source directory to target directory.')
-        parser.add_argument('-l', '--list', default='fcopy.list', help='File containing the list of files to copy.')
-        parser.add_argument("-s", "--source", required=True, help="source directory containing files to copy")
-        parser.add_argument("-t", "--target", help="target directory where files will be copied")
-        parser.add_argument("-m", "--mode", default="update", choices=CopyModes, help="copy mode: u|update, o|overwrite, r|rename")
-        parser.add_argument("-i", "--interactive", action="store_true", help="Let the user edit the list of action plans to copy")
-        parser.add_argument("-v", "--verbose", action="count", default=0, help="increase verbosity level (use -vv for more detail)")
-        parser.add_argument('--filter', help='file containing blacklist regex patterns, one per line.')
-        parser.add_argument("--update-list", action="store_true", help="update the --list file with current --source contents (with confirmation)")
-        parser.add_argument("--dry-run", action="store_true", help="simulate operations without actually copying files")
-        parser.add_argument("--strict", action="store_true", help="treat warnings as errors (exit with non-zero code on warnings)")
-        parser.add_argument('--debug', action='store_true', default=False, help=argparse.SUPPRESS)
+            description="Copy files from source directory to target directory with flexible copy modes.",
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        )
+        parser = argparse.ArgumentParser(
+            description="Copy files from source directory to target directory."
+        )
+        parser.add_argument(
+            "-l",
+            "--list",
+            default="fcopy.list",
+            help="File containing the list of files to copy.",
+        )
+        parser.add_argument(
+            "-s",
+            "--source",
+            required=True,
+            help="source directory containing files to copy",
+        )
+        parser.add_argument(
+            "-t", "--target", help="target directory where files will be copied"
+        )
+        parser.add_argument(
+            "-m",
+            "--mode",
+            default="update",
+            choices=CopyModes,
+            help="copy mode: u|update, o|overwrite, r|rename",
+        )
+        parser.add_argument(
+            "-i",
+            "--interactive",
+            action="store_true",
+            help="Let the user edit the list of action plans to copy",
+        )
+        parser.add_argument(
+            "-v",
+            "--verbose",
+            action="count",
+            default=0,
+            help="increase verbosity level (use -vv for more detail)",
+        )
+        parser.add_argument(
+            "--filter", help="file containing blacklist regex patterns, one per line."
+        )
+        parser.add_argument(
+            "--update-list",
+            action="store_true",
+            help="update the --list file with current --source contents (with confirmation)",
+        )
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="simulate operations without actually copying files",
+        )
+        parser.add_argument(
+            "--strict",
+            action="store_true",
+            help="treat warnings as errors (exit with non-zero code on warnings)",
+        )
+        parser.add_argument(
+            "--debug", action="store_true", default=False, help=argparse.SUPPRESS
+        )
 
         try:
             args = parser.parse_args()
         except SystemExit:
-            print('\n'.join(parser.format_help().splitlines()[1:]))
+            print("\n".join(parser.format_help().splitlines()[1:]))
             raise
 
         # argparse 默认会保留字符串中的引号
         for key in args.__dict__:
             if type(args.__dict__[key]) == str:
-                args.__dict__[key] = args.__dict__[key].strip(' \'"')
+                args.__dict__[key] = args.__dict__[key].strip(" '\"")
 
         if args.debug:
             args.verbose = 2
-            input('Wait for debugging and press Enter to continue...')
+            input("Wait for debugging and press Enter to continue...")
 
         if not args.list or not args.source:
             output(0, "Please provide the required arguments.")
@@ -577,12 +658,24 @@ def main():
 
         # Read the filter file
         args.filter_patterns = read_file_filter(args.filter)
-        if not args.filter_patterns and "_specified" in vars(args) and "filter" in args._specified:
-            output(1, f"No valid patterns found in filter file '{args.filter}'.", strict=args.strict)
+        if (
+            not args.filter_patterns
+            and "_specified" in vars(args)
+            and "filter" in args._specified
+        ):
+            output(
+                1,
+                f"No valid patterns found in filter file '{args.filter}'.",
+                strict=args.strict,
+            )
 
         # Check if running in the terminal, because editor is only available in terminal
         if args.interactive and not sys.stdout.isatty():
-            output(1, "Not running in the terminal (may be a redirect or pipe)", strict=args.strict)
+            output(
+                1,
+                "Not running in the terminal (may be a redirect or pipe)",
+                strict=args.strict,
+            )
 
         if args.update_list:
             return update_file_list(args)
@@ -595,8 +688,9 @@ def main():
 
     except KeyboardInterrupt:
         output(2)
-        output(0, "Keyboard Interrupt", end='')
+        output(0, "Keyboard Interrupt", end="")
         return 1
+
 
 if __name__ == "__main__":
     sys.exit(main())
