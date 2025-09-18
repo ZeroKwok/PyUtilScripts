@@ -21,7 +21,7 @@ import filecmp
 import argparse
 import datetime
 import traceback
-from typing import Tuple, List
+from typing import Tuple, List, Set
 from pathlib import Path
 from natsort import natsorted
 from datetime import datetime
@@ -304,13 +304,14 @@ class Action:
         return iter((self.action, self.src, self.dst))
 
     def natsorted(actions):
-        priority = {c: i for i, c in enumerate(["m", "c", "u", "o", "r", "i", "s"])}
+        priority = {c: i for i, c in enumerate(ActionPriority)}
         return natsorted(actions, key=lambda a: (priority[a.action], a.src, a.dst))
 
 
 def make_actions(args):
     items: List[Action] = []
-    rename_list: List[str] = []
+    dirs: Set[str] = set()
+    renamed: Set[str] = set()
 
     for file in args.manifest:
         source = os.path.normpath(os.path.join(args.source, file))
@@ -318,21 +319,20 @@ def make_actions(args):
 
         # 过滤掉名单中的文件
         if filter_match(source, args.filter_patterns):
-            output(2, f"Filtered: {file}", verbose=args.verbose)
+            items.append(Action("f", file))
             continue
 
         try:
             stat1 = os.stat(source)
         except:
-            # 源文件不存在则发出警告, 不视为错误
-            output(1, f"SourceFileNotFound: {file}", strict=args.strict)
+            items.append(Action("m", file))  # missing
             continue
 
         try:
             stat2 = os.stat(target)
         except FileNotFoundError:
             if stat.S_ISDIR(stat1.st_mode):
-                items.append(Action("m", file))
+                dirs.add(file)  # dir that target is not exist
             else:
                 items.append(Action("c", file))
             continue
@@ -341,9 +341,9 @@ def make_actions(args):
             continue
 
         if args.mode in ("r", "rename"):
-            file2 = increment_filename(args.target, file, rename_list)
-            items.append(Action("c", file, str(file2)))
-            rename_list.append(file2)
+            file2 = increment_filename(args.target, file, renamed)
+            items.append(Action("r", file, str(file2)))
+            renamed.add(file2)
             continue
 
         elif args.mode in ("o", "overwrite"):
@@ -378,6 +378,14 @@ def make_actions(args):
             items.append(Action("s" if meta_cmp == 0 else "i", file, common=common()))
         else:
             items.append(Action("u" if meta_cmp >= 1 else "i", file, common=common()))
+
+    # 仅记录空目录，因为空目录不能被拷贝隐式创建
+    for a in items:
+        if a.action in ("c", "o", "u", "r"):
+            for p in Path(a.src).parents:
+                dirs.discard(str(p))
+    for f in dirs:
+        items.append(Action("e", f))
 
     return Action.natsorted(items)
 
@@ -471,7 +479,10 @@ def print_actions(actions: list, head: str, args):
             "s": "yellow",
             "o": "green",
             "c": "green",
-            "m": "cyan",
+            "e": "cyan",
+            "m": "yellow",
+            "f": "white",
+            "i": "white",
             " ": "white",
         }
         f = a if a in c else " "
@@ -558,7 +569,7 @@ def copy_files(args):
                         return 1
             copied += 1
 
-        elif action == "m":
+        elif action == "e":
             try:
                 os.makedirs(target, exist_ok=True)
             except OSError as e:
