@@ -325,7 +325,11 @@ def make_actions(args):
         try:
             stat1 = os.stat(source)
         except:
-            items.append(Action("m", file))  # missing
+            if args.strict:
+                output(0, f"Source Missing: {source}")
+                raise SystemExit()
+            else:
+                items.append(Action("m", file))  # missing
             continue
 
         try:
@@ -490,7 +494,7 @@ def print_actions(actions: list, head: str, args):
     output(2)
 
 
-def get_available_editor(defaults=("micro", "nano", "vim", "vi", "notepad")):
+def get_available_editor(defaults=["micro", "nano", "vim", "vi", "notepad"]):
     """检查哪个编辑器可用，返回第一个可用的，否则返回 None"""
     if "EDITOR" in os.environ:
         defaults.insert(0, os.environ["EDITOR"])
@@ -543,6 +547,12 @@ def copy_files(args):
         if action in ("s", "i"):
             skipped += 1
             continue
+        elif action == "f":
+            output(2, f"Filtered: {file1}", verbose=args.verbose)
+            continue
+        elif action == "m":
+            output(1, f"Source Missing: {file1}")
+            continue
 
         source = os.path.normpath(os.path.join(args.source, file1))
         target = os.path.normpath(os.path.join(args.target, file2))
@@ -565,8 +575,7 @@ def copy_files(args):
                     shutil.copy2(source, target)
                 except OSError as e:
                     output(0, f"{prefix} {source} to {target}: {e}")
-                    if args.strict:
-                        return 1
+                    return 1
             copied += 1
 
         elif action == "e":
@@ -574,8 +583,7 @@ def copy_files(args):
                 os.makedirs(target, exist_ok=True)
             except OSError as e:
                 output(0, f"{prefix} {source} to {target}: {e}")
-                if args.strict:
-                    return 1
+                return 1
             copied += 1
 
     output(2, f"Done. {copied} files copied, {skipped} skipped.")
