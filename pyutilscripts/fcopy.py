@@ -700,16 +700,9 @@ def main():
 
         # Read the filter file
         args.filter_patterns = read_file_filter(args.filter)
-        if (
-            not args.filter_patterns
-            and "_specified" in vars(args)
-            and "filter" in args._specified
-        ):
-            output(
-                1,
-                f"No valid patterns found in filter file '{args.filter}'.",
-                strict=args.strict,
-            )
+        if not args.filter_patterns and args.filter:
+            output(0, f"No valid patterns found in filter file '{args.filter}'.")
+            return 1
 
         # Check if running in the terminal, because editor is only available in terminal
         if args.interactive and not sys.stdout.isatty():
