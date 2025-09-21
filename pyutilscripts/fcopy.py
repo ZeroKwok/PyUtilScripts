@@ -76,6 +76,18 @@ ActionNames = {
     "s": "Skipped",
 }
 
+ActionColors = {
+    "c": "green",
+    "u": "green",
+    "o": "yellow",
+    "r": "yellow",
+    "e": "green",
+    "m": "magenta",
+    "i": "white",
+    "f": "white",
+    "s": "white",
+}
+
 
 def output(level, *args, **kwargs):
     """
@@ -303,9 +315,9 @@ class Action:
     def __iter__(self):
         return iter((self.action, self.src, self.dst))
 
-    def natsorted(actions):
-        priority = {c: i for i, c in enumerate(ActionPriority)}
-        return natsorted(actions, key=lambda a: (priority[a.action], a.src, a.dst))
+    def natsorted(actions, priority=ActionPriority):
+        keys = {c: i for i, c in enumerate(priority)}
+        return natsorted(actions, key=lambda a: (keys[a.action], a.src, a.dst))
 
 
 def make_actions(args):
@@ -391,6 +403,7 @@ def make_actions(args):
     for f in dirs:
         items.append(Action("e", f))
 
+    # 按优先级排序
     return Action.natsorted(items)
 
 
@@ -459,7 +472,8 @@ def join_actions(actions: list[Action], head: str, args):
         if args.verbose > 0:  # 注释以独立的行存在
             for c in item.common or []:
                 lines.append(f"   # {c}")
-    info = str(counter).replace("'", "")
+
+    info = str(counter).replace("'", "") + f"={len(actions)}"
     head = head.format(Source=args.source, Target=args.target, Count=info)
     body = "\n".join(lines)
     body = body.format(**counter)
@@ -468,8 +482,12 @@ def join_actions(actions: list[Action], head: str, args):
 
 
 def print_actions(actions: list, head: str, args):
-    output(2)
-    output(2, f"The following actions will be performed:", "yellow")
+    output(2, f"\nThe following actions will be performed:\n", "yellow")
+    colors = {
+        "#": "dark_grey",
+        " ": "white",
+    }
+    colors.update(ActionColors)
 
     lines = join_actions(actions, head, args)
     for line in lines.splitlines():
@@ -478,19 +496,8 @@ def print_actions(actions: list, head: str, args):
             continue
 
         a = line.strip()[0]
-        c = {
-            "#": "dark_grey",
-            "s": "yellow",
-            "o": "green",
-            "c": "green",
-            "e": "cyan",
-            "m": "yellow",
-            "f": "white",
-            "i": "white",
-            " ": "white",
-        }
-        f = a if a in c else " "
-        output(2, line, c[f])
+        f = a if a in colors else " "
+        output(2, line, colors[f])
     output(2)
 
 
@@ -540,18 +547,23 @@ def copy_files(args):
         actions = edit_actions(actions, ActionFileHead, args)
     elif args.dry_run or args.verbose > 1:
         print_actions(actions, ActionFileHead, args)
+    output(2)
 
-    copied, skipped = 0, 0
+    copied, skipped, missing, filtered = 0, 0, 0, 0
     for action, file1, file2 in actions:
         file2 = file2 or file1
         if action in ("s", "i"):
             skipped += 1
             continue
         elif action == "f":
-            output(2, f"Filtered: {file1}", verbose=args.verbose)
+            filtered += 1
+            if not args.interactive:  # 交互模式下，已经显示过了, 因此不再展示
+                output(2, f"Filtered: {file1}", verbose=args.verbose)
             continue
         elif action == "m":
-            output(1, f"Source Missing: {file1}")
+            missing += 1
+            if not args.interactive:
+                output(1, f"Source Missing: {file1}")
             continue
 
         source = os.path.normpath(os.path.join(args.source, file1))
@@ -586,7 +598,11 @@ def copy_files(args):
                 return 1
             copied += 1
 
-    output(2, f"Done. {copied} files copied, {skipped} skipped.")
+    output(
+        2,
+        f"Done. {copied} files copied, {skipped} skipped, "
+        f"{missing} missing, {filtered} filtered.",
+    )
     return 0
 
 
