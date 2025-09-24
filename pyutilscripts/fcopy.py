@@ -44,7 +44,7 @@ ActionFileHead = """# Action plan for file copying (edit this file to change act
 # u - Update    : Target exists with metadata mismatch, source is newer
 # o - Overwrite : Target exists, copy and overwrite unconditionally (--mode overwrite)
 # r - Rename    : Target exists, copy with incremented filename (--mode rename)
-# e - Make dir  : Source is an empty directory (not auto-created by subfile copy)
+# e - MakeDir   : Source is an empty directory (not auto-created by subfile copy)
 # m - Missing   : Source doesn't exist
 # i - Ignore    : Target exists with metadata mismatch, 
 #                 but deep comparison shows no difference or source is older
@@ -59,21 +59,34 @@ ActionFileHead = """# Action plan for file copying (edit this file to change act
 #
 # Source Directory: {Source}
 # Target Directory: {Target}
+# Blacklist       : {Filter}
 # Action Count    : {Count}
 """
 
 ActionPriority = ["c", "u", "o", "r", "e", "m", "i", "f", "s"]
 
-ActionNames = {
-    "c": "Copying",
-    "u": "Updating",
-    "o": "Replacing",
-    "r": "Renaming",
-    "e": "MakingDir",
+ActionTags = {
+    "c": "Copy",
+    "u": "Update",
+    "o": "Overwrite",
+    "r": "Rename",
+    "e": "MakeDir",
     "m": "Missing",
-    "i": "Ignored",
-    "f": "Filtered",
-    "s": "Skipped",
+    "i": "Ignore",
+    "f": "Filter",
+    "s": "Skip",
+}
+
+ActionDescriptions = {
+    "c": "# Files to copy: {}",
+    "u": "# Files to update: {}",
+    "o": "# Files to overwrite: {}",
+    "r": "# Files to rename: {}",
+    "e": "# Empty directories to create: {}",
+    "m": "# Source Files missing: {}",
+    "i": "# Files to ignore: {}",
+    "f": "# Files filtered out: {}",
+    "s": "# Files to skip: {}",
 }
 
 ActionColors = {
@@ -459,7 +472,7 @@ def join_actions(actions: list[Action], head: str, args):
             current = item.action
             counter[item.action] = 0
             lines.append("")
-            lines.append(f"# {ActionNames[item.action]} Files: {{{item.action}}}")
+            lines.append(ActionDescriptions[item.action].format(f"{{{item.action}}}"))
         counter[item.action] += 1
 
         line = f'{item.action} "{item.src}"'
@@ -474,7 +487,9 @@ def join_actions(actions: list[Action], head: str, args):
                 lines.append(f"   # {c}")
 
     info = str(counter).replace("'", "") + f"={len(actions)}"
-    head = head.format(Source=args.source, Target=args.target, Count=info)
+    head = head.format(
+        Source=args.source, Target=args.target, Count=info, Filter=args.filter
+    )
     body = "\n".join(lines)
     body = body.format(**counter)
 
@@ -558,7 +573,7 @@ def copy_files(args):
         elif action == "f":
             filtered += 1
             if not args.interactive:  # 交互模式下，已经显示过了, 因此不再展示
-                output(2, f"Filtered: {file1}", verbose=args.verbose)
+                output(3, f"Filtered: {file1}", verbose=args.verbose)
             continue
         elif action == "m":
             missing += 1
@@ -573,7 +588,7 @@ def copy_files(args):
             if os.path.isdir(source):
                 continue
 
-            prefix = ActionNames[action]
+            prefix = ActionTags[action]
             if args.dry_run:
                 output(2, f"Dry run: {prefix}: {file1} -> {file2}", "cyan")
             elif args.verbose > 0:
@@ -600,8 +615,7 @@ def copy_files(args):
 
     output(
         2,
-        f"Done. {copied} files copied, {skipped} skipped, "
-        f"{missing} missing, {filtered} filtered.",
+        f"Done. {copied} copied, {skipped} skipped, {missing} missing, {filtered} filtered.",
     )
     return 0
 
@@ -699,10 +713,13 @@ def main():
             return 1
 
         # Read the filter file
-        args.filter_patterns = read_file_filter(args.filter)
-        if not args.filter_patterns and args.filter:
-            output(0, f"No valid patterns found in filter file '{args.filter}'.")
-            return 1
+        args.filter_pattern = None
+        if args.filter:
+            args.filter = os.path.normpath(args.filter)
+            args.filter_patterns = read_file_filter(args.filter)
+            if not args.filter_patterns:
+                output(0, f"No valid patterns found in filter file '{args.filter}'.")
+                return 1
 
         # Check if running in the terminal, because editor is only available in terminal
         if args.interactive and not sys.stdout.isatty():
