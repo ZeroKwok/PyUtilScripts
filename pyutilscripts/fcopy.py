@@ -706,7 +706,7 @@ def main():
             return 1
 
         # Read the filter file
-        args.filter_pattern = None
+        args.filter_patterns = []
         if args.filter:
             args.filter = os.path.normpath(args.filter)
             args.filter_patterns = read_file_filter(args.filter)
