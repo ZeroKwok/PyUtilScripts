@@ -319,11 +319,11 @@ def increment_filename(directory, filename, rename_list):
 class Action:
     """Action类用于描述操作行为"""
 
-    def __init__(self, action: str, src: str, dst: str = "", common: str = None):
+    def __init__(self, action: str, src: str, dst: str = "", attributes=None):
         self.action = action
         self.src = src
         self.dst = dst
-        self.common = common
+        self.attributes = attributes
 
     def __iter__(self):
         return iter((self.action, self.src, self.dst))
@@ -381,32 +381,15 @@ def make_actions(args):
 
         # update mode
         is_same, meta_cmp = file_cmp(source, target, stat1, stat2)
-
-        def common():
-            if args.verbose > 0:
-                return (
-                    [
-                        f"src: {utils.format_ftime(stat1.st_mtime)}, {utils.format_bytes(stat1.st_size)}",
-                        f"dst: {utils.format_ftime(stat2.st_mtime)}, {utils.format_bytes(stat2.st_size)}",
-                    ]
-                    if meta_cmp != 0
-                    else None
-                )
-            else:
-                return {
-                    0: None,
-                    1: [
-                        "src newer",
-                    ],
-                    -1: [
-                        "dst newer",
-                    ],
-                }[meta_cmp]
-
+        attributes = (meta_cmp, stat1, stat2) if meta_cmp != 0 else None
         if is_same:
-            items.append(Action("s" if meta_cmp == 0 else "i", file, common=common()))
+            items.append(
+                Action("s" if meta_cmp == 0 else "i", file, attributes=attributes)
+            )
         else:
-            items.append(Action("u" if meta_cmp >= 1 else "i", file, common=common()))
+            items.append(
+                Action("u" if meta_cmp >= 1 else "i", file, attributes=attributes)
+            )
 
     # 仅记录空目录，因为空目录不能被拷贝隐式创建
     for a in items:
@@ -478,13 +461,21 @@ def join_actions(actions: list[Action], head: str, args):
         line = f'{item.action} "{item.src}"'
         if item.dst:
             line += f' -> "{item.dst}"'
-        if item.common and args.verbose <= 0:
-            line = line_append_space(line) + f'# {",".join(item.common)}'
+        if item.attributes and args.verbose <= 0:
+            line = (
+                line_append_space(line)
+                + f'# {"src newer" if item.attributes[0] == 1 else "dst newer"}'
+            )
         lines.append(line)
 
-        if args.verbose > 0:  # 注释以独立的行存在
-            for c in item.common or []:
-                lines.append(f"   # {c}")
+        if item.attributes and args.verbose > 0:  # 详细模式下，以独立的行存在
+            _, stat1, stat2 = item.attributes
+            lines.append(
+                f"#   src: {utils.format_ftime(stat1.st_mtime)}, {utils.format_bytes(stat1.st_size)}"
+            )
+            lines.append(
+                f"#   dst: {utils.format_ftime(stat2.st_mtime)}, {utils.format_bytes(stat2.st_size)}"
+            )
 
     info = str(counter).replace("'", "") + f"={len(actions)}"
     head = head.format(
@@ -613,6 +604,8 @@ def copy_files(args):
                 return 1
             copied += 1
 
+    if args.dry_run:
+        output(2, "Dry run: ", end="", color="cyan")
     output(
         2,
         f"Done. {copied} copied, {skipped} skipped, {missing} missing, {filtered} filtered.",
