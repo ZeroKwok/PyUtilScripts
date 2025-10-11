@@ -507,7 +507,7 @@ def print_actions(actions: list, head: str, args):
     output(2)
 
 
-def get_available_editor(defaults=["micro", "nano", "vim", "vi", "notepad"]):
+def get_available_editor(defaults=["nano", "vim", "vi", "notepad"]):
     """检查哪个编辑器可用，返回第一个可用的，否则返回 None"""
     if "EDITOR" in os.environ:
         defaults.insert(0, os.environ["EDITOR"])
