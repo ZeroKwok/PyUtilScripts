@@ -46,8 +46,8 @@ ActionFileHead = """# Action plan for file copying (edit this file to change act
 # r - Rename    : Target exists, copy with incremented filename (--mode rename)
 # e - MakeDir   : Source is an empty directory (not auto-created by subfile copy)
 # m - Missing   : Source doesn't exist
-# i - Ignore    : Target exists with metadata mismatch, 
-#                 but deep comparison shows no difference or source is older
+# i - Ignore    : Source and target are the same but with metadata differences, 
+#                 or source and target differ and source is older
 # f - Filter    : Source excluded (--filter)
 # s - Skip      : Target exists, no differences found in shallow or deep comparison
 #
@@ -83,7 +83,7 @@ ActionDescriptions = {
     "o": "# Files to overwrite: {}",
     "r": "# Files to rename: {}",
     "e": "# Empty directories to create: {}",
-    "m": "# Source Files missing: {}",
+    "m": "# Source files missing: {}",
     "i": "# Files to ignore: {}",
     "f": "# Files filtered out: {}",
     "s": "# Files to skip: {}",
@@ -381,12 +381,14 @@ def make_actions(args):
 
         # update mode
         is_same, meta_cmp = file_cmp(source, target, stat1, stat2)
-        attributes = (meta_cmp, stat1, stat2) if meta_cmp != 0 else None
+        attributes = (is_same, meta_cmp, stat1, stat2) if meta_cmp != 0 else None
         if is_same:
+            # i 文件内容相同, 但属性不同: meta_cmp > 0 源文件修改时间更近, 否则反之
             items.append(
                 Action("s" if meta_cmp == 0 else "i", file, attributes=attributes)
             )
         else:
+            # i 文件内容不同, 且目标文件修改时间更近
             items.append(
                 Action("u" if meta_cmp >= 1 else "i", file, attributes=attributes)
             )
@@ -464,22 +466,22 @@ def join_actions(actions: list[Action], head: str, args):
         if item.attributes and args.verbose <= 0:
             line = (
                 line_append_space(line)
-                + f'# {"src newer" if item.attributes[0] == 1 else "dst newer"}'
+                + f'# {"Source newer" if item.attributes[0] == 1 else "Target newer"}'
             )
         lines.append(line)
 
         if item.attributes and args.verbose > 0:  # 详细模式下，以独立的行存在
-            _, stat1, stat2 = item.attributes
+            issame, _, stat1, stat2 = item.attributes
             lines.append(
-                f"#   src: {utils.format_ftime(stat1.st_mtime)}, {utils.format_bytes(stat1.st_size)}"
+                f"#   Source: {utils.format_ftime(stat1.st_mtime)}, {utils.format_bytes(stat1.st_size)}"
             )
             lines.append(
-                f"#   dst: {utils.format_ftime(stat2.st_mtime)}, {utils.format_bytes(stat2.st_size)}"
+                f"#   Target: {utils.format_ftime(stat2.st_mtime)}, {utils.format_bytes(stat2.st_size)}"
             )
 
     info = str(counter).replace("'", "") + f"={len(actions)}"
     head = head.format(
-        Source=args.source, Target=args.target, Count=info, Filter=args.filter
+        Source=args.source, Target=args.target, Count=info, Filter=os.path.abspath(args.filter)
     )
     body = "\n".join(lines)
     body = body.format(**counter)
