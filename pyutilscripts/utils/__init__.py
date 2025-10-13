@@ -12,6 +12,6 @@ def format_bytes(size_bytes: int, precision: int = 2) -> str:
     return f"{size:.{precision}f}{units[i]}"
 
 
-def format_ftime(seconds: float, format: str = "%y-%m-%d %H:%M"):
+def format_ftime(seconds: float, format: str = "%Y-%m-%d %H:%M"):
     """将秒数格式化为日期和时间"""
     return time.strftime(format, time.localtime(seconds))

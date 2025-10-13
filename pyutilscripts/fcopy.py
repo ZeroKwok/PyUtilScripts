@@ -54,8 +54,8 @@ ActionFileHead = """# Action plan for file copying (edit this file to change act
 # Example:
 # c file1.txt                   Copy
 # r file3.txt -> file(3).txt    Copy and Rename to file(3).txt
-# o file2.txt                   Overwrite
-# s file2.txt                   Skipped because the files are the same
+# i file2.txt # file:=, meta:>  Files are the same and source file is newer
+# i file2.txt # file:≠, meta:<  Files are different and source is older
 #
 # Source Directory: {Source}
 # Target Directory: {Target}
@@ -448,6 +448,11 @@ def line_append_space(line, align=16, minLength=32):
 
 
 def join_actions(actions: list[Action], head: str, args):
+    def comment1(prefix, same, cmp): 
+        return f'{prefix} file:{["≠", "="][same]}, meta:{["<", ">"][cmp == 1]}'
+    def comment2(prefix, stat): 
+        return f"{prefix} {utils.format_ftime(stat.st_mtime)}, {utils.format_bytes(stat.st_size)}"
+
     lines = []
     current = ""
     counter = {}
@@ -459,25 +464,20 @@ def join_actions(actions: list[Action], head: str, args):
             lines.append("")
             lines.append(ActionDescriptions[item.action].format(f"{{{item.action}}}"))
         counter[item.action] += 1
-
+        
         line = f'{item.action} "{item.src}"'
         if item.dst:
             line += f' -> "{item.dst}"'
         if item.attributes and args.verbose <= 0:
-            line = (
-                line_append_space(line)
-                + f'# {"Source newer" if item.attributes[0] == 1 else "Target newer"}'
-            )
+            same, cmp, _, _ = item.attributes
+            line = line_append_space(line) + comment1('#', same, cmp)
         lines.append(line)
 
         if item.attributes and args.verbose > 0:  # 详细模式下，以独立的行存在
-            issame, _, stat1, stat2 = item.attributes
-            lines.append(
-                f"#   Source: {utils.format_ftime(stat1.st_mtime)}, {utils.format_bytes(stat1.st_size)}"
-            )
-            lines.append(
-                f"#   Target: {utils.format_ftime(stat2.st_mtime)}, {utils.format_bytes(stat2.st_size)}"
-            )
+            same, cmp, stat1, stat2 = item.attributes
+            lines.append(comment1('#   Status:', same, cmp))
+            lines.append(comment2('#   Source:', stat1))
+            lines.append(comment2('#   Target:', stat2))
 
     info = str(counter).replace("'", "") + f"={len(actions)}"
     head = head.format(
