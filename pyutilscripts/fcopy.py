@@ -481,7 +481,8 @@ def join_actions(actions: list[Action], head: str, args):
 
     info = str(counter).replace("'", "") + f"={len(actions)}"
     head = head.format(
-        Source=args.source, Target=args.target, Count=info, Filter=os.path.abspath(args.filter)
+        Source=args.source, Target=args.target, Count=info,
+        Filter=os.path.abspath(args.filter) if args.filter else ""
     )
     body = "\n".join(lines)
     body = body.format(**counter)
