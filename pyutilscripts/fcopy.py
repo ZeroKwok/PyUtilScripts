@@ -409,6 +409,8 @@ def parse_actions(lines, comment="#"):
     files = []
     for row, line in enumerate(lines):
         line = line.strip()
+        if line.startswith('\ufeff'): # BOM
+            line = line[1:]
         if not line or line.startswith(comment):
             continue
 
