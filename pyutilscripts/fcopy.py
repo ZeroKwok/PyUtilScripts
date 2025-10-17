@@ -582,14 +582,13 @@ def copy_files(args):
             if os.path.isdir(source):
                 continue
 
+            title = "Dry run: " if args.dry_run else ""
             prefix = ActionTags[action]
-            if args.dry_run:
-                output(2, f"Dry run: {prefix}: {file1} -> {file2}", "cyan")
-            elif args.verbose > 0:
-                output(2, f"{prefix} {file1} -> {file2}", "green")
-            else:
-                output(2, f"{prefix} {file1}", "green")
-
+            stems = f"{file1} -> {file2}" if args.verbose > 0 or args.dry_run else f"{file1}"
+            stems = f"{source} -> {target}" if args.verbose > 1 else stems
+            color = "cyan" if args.dry_run else "green"
+            output(2, f"{title}{prefix} {stems}", color)
+ 
             if not args.dry_run:
                 try:
                     os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -607,8 +606,6 @@ def copy_files(args):
                 return 1
             copied += 1
 
-    if args.dry_run:
-        output(2, "Dry run: ", end="", color="cyan")
     output(
         2,
         f"Done. {copied} copied, {skipped} skipped, {missing} missing, {filtered} filtered.",
@@ -696,6 +693,12 @@ def main():
         if args.debug:
             args.verbose = 2
             input("Wait for debugging and press Enter to continue...")
+            
+        # print trace info in verbose mode
+        if args.verbose > 0:
+            output(2, "Options:")
+            for f in args.__dict__:
+                output(2, f"  - {f}: {args.__dict__[f]}")
 
         if not args.list or not args.source:
             output(0, "Please provide the required arguments.")
