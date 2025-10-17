@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.7.0
+
+- fcopy 调整了运行时与verbose模式的输出, 提升用户体验
+- fcopy 调整了默认编辑器优先级, 优先使用 Nano, 可通过 `export EDITOR=vim` 覆盖
+- fcopy 调整了行动清单的输出与注释，增强可读性
+- fcopy 修复一些bugs: --filter 为None导致的异常, Windows下因为BOM 文件头不能解析的问题
+
 ## v0.6.0
 
 - fcopy 重构了行动列表与执行输出的内容, 使宏观行为更加清晰
