@@ -90,7 +90,9 @@ class ToastNotifier:
             bool: True if notification was sent successfully
             
         Note: 
-            https://github.com/go-toast/toast/blob/master/cli/main.go
+            1. https://github.com/go-toast/toast/blob/master/cli/main.go
+            2. Chinese is not supported, the reason is that the toast64.exe is not compatible, 
+               and the source code needs to be modified
         """
         cmd = [self.toast64_path]
 
