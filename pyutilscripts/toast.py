@@ -139,6 +139,7 @@ class ToastNotifier:
             elif value is not False and value is not None:
                 cmd.extend([f"--{key}", str(value)])
 
+        # print(" ".join(cmd))
         try:
             # Use shell=True to handle paths with spaces
             result = subprocess.run(
@@ -274,9 +275,7 @@ def toast_quick(title: str, message: str, **kwargs) -> bool:
     except Exception:
         return False
 
-
-# Example usage
-if __name__ == "__main__":
+def main():
     # Example 1: Simple usage
     if toast_quick("Hello", "This is a simple notification", audio="IM"):
         print("Simple notification sent successfully")
@@ -310,3 +309,7 @@ if __name__ == "__main__":
         audio="ms-winsoundevent:Notification.IM",
         duration="long"
     )
+
+# Example usage
+if __name__ == "__main__":
+    main()
