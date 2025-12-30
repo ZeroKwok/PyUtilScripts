@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.8.0
+
+- toast 添加 windows toast 通知支持
+
 ## v0.7.0
 
 - fcopy 调整了运行时与verbose模式的输出, 提升用户体验
