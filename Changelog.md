@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.9.0
+
+- httpd 添加 http.server 限速版的文件服务器
+
 ## v0.8.0
 
 - toast 添加 windows toast 通知支持
