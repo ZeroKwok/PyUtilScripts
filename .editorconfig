@@ -1,0 +1,13 @@
+# Editor configuration, see https://editorconfig.org
+root = true
+
+[*]
+charset = utf-8
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+# 下面只覆盖不一样的配置，其他全部继承 [*]
+[*.md]
+indent_size = 2 
