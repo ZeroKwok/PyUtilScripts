@@ -8,6 +8,8 @@ import traceback
 import threading
 import contextlib
 
+from . import utils
+
 # 全局变量
 prefix = b'\xef\x5a'
 running = True
@@ -20,14 +22,6 @@ stats = {
     'last_reset': time.time()
 }
 
-def format_bytes(bytes_val, precision='.2f', postfix=''):
-    """将字节数格式化为人类可读形式"""
-    for unit in ['B', 'KB', 'MB', 'GB']:
-        if bytes_val < 1024.0:
-            return f"{bytes_val:{precision}}{unit}{postfix}"
-        bytes_val /= 1024.0
-    return f"{bytes_val:{precision}}TB{postfix}"
-
 def report_stats(interval=5):
     """定期汇报流量统计"""
     global stats
@@ -39,8 +33,8 @@ def report_stats(interval=5):
             tx_rate = stats['tx_bytes'] / elapsed if elapsed > 0 else 0
             rx_rate = stats['rx_bytes'] / elapsed if elapsed > 0 else 0
             
-            tx = f"{stats['tx_packets']} pkts {format_bytes(stats['tx_bytes'], precision='.2f')} {format_bytes(tx_rate, precision=' 7.1f', postfix='/s')}"
-            rx = f"{stats['rx_packets']} pkts {format_bytes(stats['rx_bytes'], precision='.2f')} {format_bytes(rx_rate, precision=' 7.1f', postfix='/s')}"
+            tx = f"{stats['tx_packets']} pkts {utils.format_bytes(stats['tx_bytes'], precision='.2f')} {utils.format_bytes(tx_rate, precision=' 7.1f', postfix='/s')}"
+            rx = f"{stats['rx_packets']} pkts {utils.format_bytes(stats['rx_bytes'], precision='.2f')} {utils.format_bytes(rx_rate, precision=' 7.1f', postfix='/s')}"
             print(f"[*] {elapsed:06.1f}s TX [{tx}] - RX [{rx}]")
             
             # 重置统计（可选，注释掉则累计）
@@ -130,11 +124,11 @@ def create_tun(name, addr, mtu=1500):
     exit(1)
 
 def main():
-    parser = argparse.ArgumentParser(description="Create an TUN Interface with Traffic Statistics")
+    parser = argparse.ArgumentParser(description="Create a simple TUN to forward IP packets to remote peers")
     parser.add_argument("--name", default="tun0", help="Interface name")
-    parser.add_argument("--addr", default="fd00::1", help="IPv6 Address/Prefix") 
+    parser.add_argument("--addr", default="fd00::1", help="IPv6 Address") 
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
-    parser.add_argument("--report-interval", type=int, default=5, help="Traffic report interval in seconds (default: 5)")
+    parser.add_argument("--stats-interval", type=int, default=5, help="Traffic report interval in seconds (default: 5)")
     parser.add_argument("--no-stats", action="store_true", help="Disable traffic statistics reporting")
     parser.add_argument("--remote", default="127.0.0.1:5001", help="Forward packets to remote endpoint")
     parser.add_argument("--listen", default="0.0.0.0:0", help="Listen for incoming packets")
@@ -172,10 +166,10 @@ def main():
     
     # 启动统计报告线程（如果不禁用）
     if not args.no_stats:
-        t_stats = threading.Thread(target=report_stats, args=(args.report_interval,))
+        t_stats = threading.Thread(target=report_stats, args=(args.stats_interval,))
         t_stats.daemon = True
         t_stats.start()
-        print(f"[+] Traffic statistics reporting every {args.report_interval}s")
+        print(f"[+] Traffic statistics reporting every {args.stats_interval}s")
     else:
         print("[*] Traffic statistics reporting disabled")
 
@@ -190,10 +184,10 @@ def main():
         if not args.no_stats:
             print("\n[!] Final Traffic Summary:")
             with stats_lock:
-                print(f"     Total TX: {format_bytes(stats['tx_bytes'])} ({stats['tx_packets']} packets)")
-                print(f"     Total RX: {format_bytes(stats['rx_bytes'])} ({stats['rx_packets']} packets)")
-                print(f"     Total: {format_bytes(stats['tx_bytes'] + stats['rx_bytes'])}")
-                
+                print(f"     Total TX: {utils.format_bytes(stats['tx_bytes'])} ({stats['tx_packets']} packets)")
+                print(f"     Total RX: {utils.format_bytes(stats['rx_bytes'])} ({stats['rx_packets']} packets)")
+                print(f"     Total: {utils.format_bytes(stats['tx_bytes'] + stats['rx_bytes'])}")
+
         global running
         running = False
         tun.down()
