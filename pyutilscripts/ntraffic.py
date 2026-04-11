@@ -47,16 +47,19 @@ class AnyEndpoint:
 class UDPEndpoint(AnyEndpoint):
     def __init__(self, addr, peers = None):
         super().__init__()
+        self.type = 'UDP'
         self.addr = addr
         self.peers = peers
 
-    def connect(self):
+    def establish(self):
+        self.send_packet(b'')   # 发送空包以传送对端地址
+
+    def listen(self):
         if self.sock:
             self.sock.close()
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(self.addr)
         self.addr = self.sock.getsockname()
-        self.send_packet(b'')   # 发送空包以传送对端地址
 
     def send_packet(self, data):
         try:
@@ -73,7 +76,7 @@ class UDPEndpoint(AnyEndpoint):
             if not self.peers:  # 第一次接收数据, 存储对端地址
                 self.peers = addr
             return data
-        except ConnectionResetError as e:
+        except ConnectionResetError as e: # 对端未监听端口
             return None
         except Exception as e:
             return None
@@ -84,11 +87,27 @@ class UDPEndpoint(AnyEndpoint):
 
 
 class TCPEndpoint(AnyEndpoint):
-    def __init__(self, peers, timeout=5):
+    def __init__(self, addr, peers = None, timeout=5):
         super().__init__()
+        self.type = 'TCP'
+        self.addr = addr
         self.peers = peers
         self.timeout = timeout
         self.connected = False
+        self.listen_sock = None
+
+    def listen(self):
+        if self.connected or self.listen_sock or not self.addr:
+            return True
+        try:
+            self.listen_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.listen_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.listen_sock.settimeout(self.timeout)
+            self.listen_sock.bind(self.addr)
+            self.listen_sock.listen(backlog=1)
+            return True
+        except Exception as e:
+            return False
 
     def connect(self):
         if self.connected:
@@ -104,9 +123,23 @@ class TCPEndpoint(AnyEndpoint):
         except Exception as e:
             return False
 
+    def accept(self):
+        if not self.listen_sock:
+            return False
+        if self.connected:
+            return True
+        try:
+            if self.sock:
+                self.sock.close()
+            self.sock, self.peers = self.listen_sock.accept()
+            self.sock.settimeout(self.timeout)
+            self.connected = True
+            return True
+        except Exception as e:
+            return False
+
     def send_packet(self, data):
-        if not self.connected:
-            self.connect()
+        self.establish()
         try:
             self.sock.sendall(struct.pack('!I', len(data)) + data)
             self.add_tx(len(data))
@@ -116,23 +149,20 @@ class TCPEndpoint(AnyEndpoint):
             return False
 
     def recv_packet(self):
-        if not self.connected:
-            self.connect()
+        self.establish()
         try:
-            length = self.recv_exact(4)
+            length = self._recv_exact(4)
             if not length:
                 return None
             length = struct.unpack('!I', length)[0]
-            data = self.recv_exact(length)
+            data = self._recv_exact(length)
             self.add_rx(len(data))
             return data
-
         except Exception as e:
-            print(f"[!] Receive error: {e}")
             self.connected = False
             return None
 
-    def recv_exact(self, size):
+    def _recv_exact(self, size):
         data = b''
         count = 0
         while len(data) < size:
@@ -150,7 +180,19 @@ class TCPEndpoint(AnyEndpoint):
                 return None
         return data
 
+    def establish(self):
+        if not self.connected:
+            if self.listen_sock:
+                self.accept()
+            else:
+                self.connect()
+
     def close(self):
         self.connected = False
         if self.sock:
             self.sock.close()
+
+    def release(self):
+        self.close()
+        if self.listen_sock:
+            self.listen_sock.close()
