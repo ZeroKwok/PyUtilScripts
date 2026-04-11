@@ -1,3 +1,12 @@
+#! python
+# -*- coding: utf-8 -*-
+#
+# This file is part of the PyUtilScripts project.
+# Copyright (c) 2020-2026 zero <zero.kwok@foxmail.com>
+#
+# For the full copyright and license information, please view the LICENSE
+# file that was distributed with this source code.
+
 import os
 import sys
 import time
@@ -8,19 +17,10 @@ import traceback
 import threading
 import contextlib
 
-from . import utils
+from . import utils, UDPEndpoint, TCPEndpoint, AnyEndpoint
 
 # 全局变量
-prefix = b'\xef\x5a'
 running = True
-stats_lock = threading.Lock()
-stats = {
-    'tx_bytes': 0,      # TUN -> UDP 发送字节数
-    'rx_bytes': 0,      # UDP -> TUN 接收字节数
-    'tx_packets': 0,    # 发送包数
-    'rx_packets': 0,    # 接收包数
-    'last_reset': time.time()
-}
 
 def report_stats(interval=5):
     """定期汇报流量统计"""
@@ -36,13 +36,7 @@ def report_stats(interval=5):
             tx = f"{stats['tx_packets']} pkts {utils.format_bytes(stats['tx_bytes'], precision='.2f')} {utils.format_bytes(tx_rate, precision=' 7.1f', postfix='/s')}"
             rx = f"{stats['rx_packets']} pkts {utils.format_bytes(stats['rx_bytes'], precision='.2f')} {utils.format_bytes(rx_rate, precision=' 7.1f', postfix='/s')}"
             print(f"[*] {elapsed:06.1f}s TX [{tx}] - RX [{rx}]")
-            
-            # 重置统计（可选，注释掉则累计）
-            # stats['tx_bytes'] = 0
-            # stats['rx_bytes'] = 0
-            # stats['tx_packets'] = 0
-            # stats['rx_packets'] = 0
-            # stats['last_reset'] = now
+
 
 def print_packet(packet, refix=''):
     src = dst = "N/A"
@@ -54,57 +48,6 @@ def print_packet(packet, refix=''):
         src, dst = packet[8:24], packet[24:40]
         src, dst = src.hex(':'), dst.hex(':')
     print(f"{refix}: {src} -> {dst} (len={len(packet)})")
-
-def forward_tun_to_udp(tun, sock:socket.socket, args:dict):
-    """将 TUN 读取的数据通过 UDP 转发到远端，并统计流量"""
-    # 发送初始握手包
-    sock.sendto(prefix + b"Hello", args.remote)
-
-    global stats
-    global running
-    while running:
-        try:
-            packet = tun.read(tun.mtu)
-            if packet:
-                args.debug and print_packet(packet, refix='[TUN -> UDP]')
-                sent = sock.sendto(packet, args.remote)
-                with stats_lock:
-                    stats['tx_bytes'] += len(packet)
-                    stats['tx_packets'] += 1
-        except TimeoutError:
-            continue
-        except Exception as e:
-            if not running:
-                return
-            print(f"[!] Error in TUN -> UDP: {traceback.format_exc()}")
-
-def forward_udp_to_tun(tun, sock:socket.socket, args:dict):
-    """接收远端 UDP 数据，写回 TUN 接口，并统计流量"""
-    with contextlib.suppress(Exception):
-        data, args.remote = sock.recvfrom(65535)
-        if data and data.startswith(prefix + b"Hello"):
-            print(f"[*] Peer connected from {args.remote}")
-        else:
-            print("[!] Warning: Received unexpected data on control channel")
-
-    global stats
-    global running
-    while running:
-        try:
-            data, _ = sock.recvfrom(65535)
-            if data:
-                args.debug and print_packet(data, refix='[UDP -> TUN]')
-                tun.write(data)
-                with stats_lock:
-                    stats['rx_bytes'] += len(data)
-                    stats['rx_packets'] += 1
-        except ConnectionResetError as e:
-            time.sleep(1)
-            continue
-        except Exception as e:
-            if not running:
-                return
-            print(f"[!] Error in UDP -> TUN: {traceback.format_exc()}")
 
 def create_tun(name, addr, mtu=1500):
     try:
@@ -123,44 +66,79 @@ def create_tun(name, addr, mtu=1500):
         print(f"[!] Error creating TUN device: {e}")
     exit(1)
 
+def forward_tun_to_peers(tun, endpoint:AnyEndpoint, args:dict):
+    """将 TUN 读取的数据通过 UDP 转发到远端，并统计流量"""
+    global running
+    while running:
+        try:
+            packet = tun.read(tun.mtu)
+            if packet:
+                args.debug and print_packet(packet, refix='[TUN -> PEER]')
+                endpoint.send_packet(packet)
+        except Exception as e:
+            print(f"[!] Error in TUN -> PEER: {traceback.format_exc()}")
+
+def forward_peers_to_tun(tun, endpoint:AnyEndpoint, args:dict):
+    """接收远端 UDP 数据，写回 TUN 接口，并统计流量"""
+    global running
+    while running:
+        try:
+            data = endpoint.recv_packet()
+            if data:
+                args.debug and print_packet(data, refix='[PEER -> TUN]')
+                tun.write(data)
+            else:
+                time.sleep(1)
+        except Exception as e:
+            print(f"[!] Error in PEER -> TUN: {traceback.format_exc()}")
+
 def main():
     parser = argparse.ArgumentParser(description="Create a simple TUN to forward IP packets to remote peers")
     parser.add_argument("--name", default="tun0", help="Interface name")
     parser.add_argument("--addr", default="fd00::1", help="IPv6 Address") 
-    parser.add_argument("--debug", action="store_true", help="Enable debug mode")
+    parser.add_argument("--protocol", default="udp", help="Transport protocol (udp/tcp)") 
+    parser.add_argument("--remote", type=str, default=None, help="Forward packets to remote endpoint")
+    parser.add_argument("--listen", type=str, default='0.0.0.0:0', help="Listen for incoming packets")
     parser.add_argument("--stats-interval", type=int, default=5, help="Traffic report interval in seconds (default: 5)")
     parser.add_argument("--no-stats", action="store_true", help="Disable traffic statistics reporting")
-    parser.add_argument("--remote", default="127.0.0.1:5001", help="Forward packets to remote endpoint")
-    parser.add_argument("--listen", default="0.0.0.0:0", help="Listen for incoming packets")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     args = parser.parse_args()
     
     if args.debug:
         print(f"[*] Debug: Starting with arguments: {args}")
         input("Press Enter to continue...")
 
-    host, port = args.remote.split(':')
-    args.remote = (host if host else '127.0.0.1', int(port))
+    def parse_addr(addr, default=None):
+        if addr is None:
+            return None
+        host, port = addr.split(':')
+        host = host if host else default[0]
+        port = port if port else default[1]
+        return (host, int(port))
 
-    host, port = args.listen.split(':')
-    args.listen = (host if host else '0.0.0.0', int(port))
-    
-    # 创建 UDP Socket 并绑定到随机端口以便接收回包
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind(args.listen)
-    
-    args.listen = sock.getsockname()
-    print(f"[+] UDP socket bound to {args.listen}")
+    args.remote = parse_addr(args.remote, default=('127.0.0.1', 0))
+    args.listen = parse_addr(args.listen, default=('0.0.0.0', 0))
+
+    if args.protocol.lower() != 'udp':
+        Endpoint = UDPEndpoint
+    else:
+        Endpoint = TCPEndpoint
+
+    endpoint = Endpoint(addr=args.listen, peers=args.remote)
+    endpoint.listen()
+    endpoint.establish()
+    print(f"[+] {endpoint.type} socket listen to {endpoint.addr}")
 
     tun = create_tun(args.name, args.addr)
     print(f"[+] Interface {tun.name} is UP")
     print(f"[+] IP Address: {args.addr}")
     
     # 启动转发线程
-    t1 = threading.Thread(target=forward_tun_to_udp, args=(tun, sock, args))
+    t1 = threading.Thread(target=forward_tun_to_peers, args=(tun, endpoint, args))
     t1.daemon = True
     t1.start()
 
-    t2 = threading.Thread(target=forward_udp_to_tun, args=(tun, sock, args))
+    t2 = threading.Thread(target=forward_peers_to_tun, args=(tun, endpoint, args))
     t2.daemon = True
     t2.start()
     
@@ -192,9 +170,23 @@ def main():
         running = False
         tun.down()
         tun.close()
-        sock.close()
+        endpoint.release()
         print("[+] Cleanup complete.")
 
 
 if __name__ == "__main__":
     main()
+
+
+'''
+可以工作于两个模式之一:
+
+- 监听模式: 监听指定端口，并等待连接, 类似于服务端
+  - listen 有效, remote 无效
+  - udp 监听端口, 接受数据得到远端地址后, 可双向通讯 
+  - tcp 监听端口, 获取连接后, 可双向通讯
+- 连接模式: 连接指定端口，类似于客户端
+  - listen 无效, remote 有效
+  - udp 发送数据, 对方获取数据后, 可双向通讯
+  - tcp 建立连接后, 可双向通讯
+'''
