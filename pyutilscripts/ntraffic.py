@@ -51,15 +51,19 @@ class UDPEndpoint(AnyEndpoint):
         self.addr = addr
         self.peers = peers
 
-    def establish(self):
-        self.send_packet(b'')   # 发送空包以传送对端地址
-
     def listen(self):
         if self.sock:
             self.sock.close()
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(self.addr)
         self.addr = self.sock.getsockname()
+
+    def establish(self):
+        self.send_packet(b'')   # 发送空包以传送对端地址
+
+    def close(self):
+        if self.sock:
+            self.sock.close()
 
     def send_packet(self, data):
         try:
@@ -81,9 +85,6 @@ class UDPEndpoint(AnyEndpoint):
         except Exception as e:
             return None
 
-    def close(self):
-        if self.sock:
-            self.sock.close()
 
 
 class TCPEndpoint(AnyEndpoint):
@@ -138,6 +139,23 @@ class TCPEndpoint(AnyEndpoint):
         except Exception as e:
             return False
 
+    def establish(self):
+        if not self.connected:
+            if self.listen_sock:
+                self.accept()
+            else:
+                self.connect()
+
+    def close(self):
+        self.connected = False
+        if self.sock:
+            self.sock.close()
+
+    def release(self):
+        self.close()
+        if self.listen_sock:
+            self.listen_sock.close()
+
     def send_packet(self, data):
         self.establish()
         try:
@@ -179,20 +197,3 @@ class TCPEndpoint(AnyEndpoint):
                 self.connected = False
                 return None
         return data
-
-    def establish(self):
-        if not self.connected:
-            if self.listen_sock:
-                self.accept()
-            else:
-                self.connect()
-
-    def close(self):
-        self.connected = False
-        if self.sock:
-            self.sock.close()
-
-    def release(self):
-        self.close()
-        if self.listen_sock:
-            self.listen_sock.close()
