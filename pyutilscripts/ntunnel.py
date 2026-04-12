@@ -7,36 +7,17 @@
 # For the full copyright and license information, please view the LICENSE
 # file that was distributed with this source code.
 
-import os
 import sys
 import time
-import struct
-import socket
 import argparse
 import traceback
 import threading
-import contextlib
 
-from . import utils, UDPEndpoint, TCPEndpoint, AnyEndpoint
+from .utils import *
+from .ntraffic import UDPEndpoint, TCPEndpoint, AnyEndpoint
 
 # 全局变量
 running = True
-
-def report_stats(interval=5):
-    """定期汇报流量统计"""
-    global stats
-    while True:
-        time.sleep(interval)
-        with stats_lock:
-            now = time.time()
-            elapsed = now - stats['last_reset']
-            tx_rate = stats['tx_bytes'] / elapsed if elapsed > 0 else 0
-            rx_rate = stats['rx_bytes'] / elapsed if elapsed > 0 else 0
-            
-            tx = f"{stats['tx_packets']} pkts {utils.format_bytes(stats['tx_bytes'], precision='.2f')} {utils.format_bytes(tx_rate, precision=' 7.1f', postfix='/s')}"
-            rx = f"{stats['rx_packets']} pkts {utils.format_bytes(stats['rx_bytes'], precision='.2f')} {utils.format_bytes(rx_rate, precision=' 7.1f', postfix='/s')}"
-            print(f"[*] {elapsed:06.1f}s TX [{tx}] - RX [{rx}]")
-
 
 def print_packet(packet, refix=''):
     src = dst = "N/A"
@@ -49,7 +30,16 @@ def print_packet(packet, refix=''):
         src, dst = src.hex(':'), dst.hex(':')
     print(f"{refix}: {src} -> {dst} (len={len(packet)})")
 
-def create_tun(name, addr, mtu=1500):
+def report_stats(args, endpoint: AnyEndpoint):
+    """定期汇报流量统计"""
+    while True:
+        time.sleep(args.stats_interval)
+        (elapsed, (tx_packets, tx_bytes, tx_rate), (rx_packets, rx_bytes, rx_rate)) = endpoint.stats(reset_timer=True)
+        tx = f"{tx_packets} pkts {format_bytes(tx_bytes, precision='.2f')} {format_bytes(tx_rate, precision=' 7.1f', postfix='/s')}"
+        rx = f"{rx_packets} pkts {format_bytes(rx_bytes, precision='.2f')} {format_bytes(rx_rate, precision=' 7.1f', postfix='/s')}"
+        print(f"[*] {elapsed:06.1f}s TX [{tx}] - RX [{rx}]")
+
+def create_tun(name:str, addr: tuple, mtu=1500):
     try:
         import pytun_pmd3 as pytun
         if sys.platform == 'win32':
@@ -132,7 +122,7 @@ def main():
     tun = create_tun(args.name, args.addr)
     print(f"[+] Interface {tun.name} is UP")
     print(f"[+] IP Address: {args.addr}")
-    
+
     # 启动转发线程
     t1 = threading.Thread(target=forward_tun_to_peers, args=(tun, endpoint, args))
     t1.daemon = True
@@ -144,7 +134,7 @@ def main():
     
     # 启动统计报告线程（如果不禁用）
     if not args.no_stats:
-        t_stats = threading.Thread(target=report_stats, args=(args.stats_interval,))
+        t_stats = threading.Thread(target=report_stats, args=(args, endpoint))
         t_stats.daemon = True
         t_stats.start()
         print(f"[+] Traffic statistics reporting every {args.stats_interval}s")
@@ -161,10 +151,10 @@ def main():
         # 最终报告
         if not args.no_stats:
             print("\n[!] Final Traffic Summary:")
-            with stats_lock:
-                print(f"     Total TX: {utils.format_bytes(stats['tx_bytes'])} ({stats['tx_packets']} packets)")
-                print(f"     Total RX: {utils.format_bytes(stats['rx_bytes'])} ({stats['rx_packets']} packets)")
-                print(f"     Total: {utils.format_bytes(stats['tx_bytes'] + stats['rx_bytes'])}")
+            (_, (tx_packets, tx_bytes, _), (rx_packets, rx_bytes, _)) = endpoint.stats()
+            print(f"     Total TX: {format_bytes(tx_bytes)} ({tx_packets} packets)")
+            print(f"     Total RX: {format_bytes(rx_bytes)} ({rx_packets} packets)")
+            print(f"     Total: {format_bytes(tx_bytes + rx_bytes)}")
 
         global running
         running = False
