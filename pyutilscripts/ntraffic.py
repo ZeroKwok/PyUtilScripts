@@ -65,6 +65,9 @@ class UDPEndpoint(AnyEndpoint):
         if self.sock:
             self.sock.close()
 
+    def release(self):
+        self.close()
+
     def send_packet(self, data):
         try:
             self.sock.sendto(data, self.peers)
@@ -98,8 +101,10 @@ class TCPEndpoint(AnyEndpoint):
         self.listen_sock = None
 
     def listen(self):
-        if self.connected or self.listen_sock or not self.addr:
+        if self.listen_sock:
             return True
+        if self.connected or not self.addr:
+            return False
         try:
             self.listen_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.listen_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
