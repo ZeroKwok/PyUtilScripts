@@ -68,7 +68,8 @@ def forward_tun_to_peers(tun, endpoint:AnyEndpoint, args:dict):
         except TimeoutError:
             continue
         except Exception as e:
-            print(f"[!] Error in TUN -> PEER: {traceback.format_exc()}")
+            if running:
+                print(f"[!] Error in TUN -> PEER: {traceback.format_exc()}")
 
 def forward_peers_to_tun(tun, endpoint:AnyEndpoint, args:dict):
     """接收远端 UDP 数据，写回 TUN 接口，并统计流量"""
