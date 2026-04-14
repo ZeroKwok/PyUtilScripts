@@ -10,7 +10,10 @@
 import time
 import struct
 import socket
+import logging
 import threading
+
+logger = logging.getLogger(__name__)
 
 class AnyEndpoint:
     def __init__(self):
@@ -50,6 +53,7 @@ class UDPEndpoint(AnyEndpoint):
         self.type = 'UDP'
         self.addr = addr
         self.peers = peers
+        self.closed = True
 
     def listen(self):
         if self.sock:
@@ -57,23 +61,31 @@ class UDPEndpoint(AnyEndpoint):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(self.addr)
         self.addr = self.sock.getsockname()
+        self.closed = False
 
-    def establish(self):
+    def establish(self) -> bool:
         self.send_packet(b'')   # 发送空包以传送对端地址
+        return True
 
     def close(self):
         if self.sock:
+            self.closed = True
             self.sock.close()
+            self.sock = None
 
     def release(self):
         self.close()
 
     def send_packet(self, data):
+        if self.peers is None:
+            logger.debug("UDPEndpoint send packet failed: no peers address")
+            return False
         try:
             self.sock.sendto(data, self.peers)
             self.add_tx(len(data))
             return True
         except Exception as e:
+            logger.exception(f"UDPEndpoint send error")
             return False
 
     def recv_packet(self):
@@ -86,6 +98,8 @@ class UDPEndpoint(AnyEndpoint):
         except ConnectionResetError as e: # 对端未监听端口
             return None
         except Exception as e:
+            if not self.closed:
+                logger.exception(f"UDPEndpoint recv error")
             return None
 
 
@@ -113,6 +127,7 @@ class TCPEndpoint(AnyEndpoint):
             self.listen_sock.listen(backlog=1)
             return True
         except Exception as e:
+            logger.exception(f"TCPEndpoint listen error")
             return False
 
     def connect(self):
@@ -127,10 +142,12 @@ class TCPEndpoint(AnyEndpoint):
             self.connected = True
             return True
         except Exception as e:
+            logger.exception(f"TCPEndpoint connect error")
             return False
 
     def accept(self):
         if not self.listen_sock:
+            logger.error("TCPEndpoint accept called without listen")
             return False
         if self.connected:
             return True
@@ -142,19 +159,22 @@ class TCPEndpoint(AnyEndpoint):
             self.connected = True
             return True
         except Exception as e:
+            logger.exception(f"TCPEndpoint accept error")
             return False
 
-    def establish(self):
+    def establish(self) -> bool:
         if not self.connected:
             if self.listen_sock:
-                self.accept()
+                return self.accept()
             else:
-                self.connect()
+                return self.connect()
+        return True
 
     def close(self):
         self.connected = False
         if self.sock:
             self.sock.close()
+            self.sock = None
 
     def release(self):
         self.close()
@@ -162,17 +182,23 @@ class TCPEndpoint(AnyEndpoint):
             self.listen_sock.close()
 
     def send_packet(self, data):
-        self.establish()
+        # 必要时会尝试连接或接受并返回连接结果
+        if not self.establish():
+            logger.error("TCPEndpoint send packet failed to establish connection")
+            return False
         try:
             self.sock.sendall(struct.pack('!I', len(data)) + data)
             self.add_tx(len(data))
             return True
         except Exception as e:
             self.connected = False
+            logger.exception(f"TCPEndpoint send packet error")
             return False
 
     def recv_packet(self):
-        self.establish()
+        if not self.establish():
+            logger.error("TCPEndpoint recv packet failed to establish connection")
+            return None
         try:
             length = self._recv_exact(4)
             if not length:
@@ -183,6 +209,7 @@ class TCPEndpoint(AnyEndpoint):
             return data
         except Exception as e:
             self.connected = False
+            logger.exception(f"TCPEndpoint recv packet error")
             return None
 
     def _recv_exact(self, size):
