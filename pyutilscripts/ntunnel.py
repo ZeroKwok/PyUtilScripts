@@ -34,7 +34,7 @@ def report_stats(args, endpoint: AnyEndpoint):
     """定期汇报流量统计"""
     while True:
         time.sleep(args.stats_interval)
-        (elapsed, (tx_packets, tx_bytes, tx_rate), (rx_packets, rx_bytes, rx_rate)) = endpoint.stats(reset_timer=True)
+        (elapsed, (tx_packets, tx_bytes, tx_rate), (rx_packets, rx_bytes, rx_rate)) = endpoint.stats()
         tx = f"{tx_packets} pkts {format_bytes(tx_bytes, precision='.2f')} {format_bytes(tx_rate, precision=' 7.1f', postfix='/s')}"
         rx = f"{rx_packets} pkts {format_bytes(rx_bytes, precision='.2f')} {format_bytes(rx_rate, precision=' 7.1f', postfix='/s')}"
         print(f"[*] {elapsed:06.1f}s TX [{tx}] - RX [{rx}]")
@@ -65,6 +65,8 @@ def forward_tun_to_peers(tun, endpoint:AnyEndpoint, args:dict):
             if packet:
                 args.debug and print_packet(packet, refix='[TUN -> PEER]')
                 endpoint.send_packet(packet)
+        except TimeoutError:
+            continue
         except Exception as e:
             print(f"[!] Error in TUN -> PEER: {traceback.format_exc()}")
 
@@ -110,9 +112,9 @@ def main():
     args.listen = parse_addr(args.listen, default=('0.0.0.0', 0))
 
     if args.protocol.lower() != 'udp':
-        Endpoint = UDPEndpoint
-    else:
         Endpoint = TCPEndpoint
+    else:
+        Endpoint = UDPEndpoint
 
     endpoint = Endpoint(addr=args.listen, peers=args.remote)
     endpoint.listen()
