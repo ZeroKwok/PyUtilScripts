@@ -13,6 +13,7 @@ import socket
 import logging
 import threading
 
+prefix = b'\xef\x5a'
 logger = logging.getLogger(__name__)
 
 class AnyEndpoint:
@@ -64,7 +65,7 @@ class UDPEndpoint(AnyEndpoint):
         self.closed = False
 
     def establish(self) -> bool:
-        self.send_packet(b'')   # 发送空包以传送对端地址
+        self.send_packet(prefix + b'HELLO')
         return True
 
     def close(self):
@@ -92,8 +93,10 @@ class UDPEndpoint(AnyEndpoint):
         try:
             data, addr = self.sock.recvfrom(65535)
             self.add_rx(len(data))
-            if not self.peers:  # 第一次接收数据, 存储对端地址
-                self.peers = addr
+            if data.startswith(prefix):
+                if data[2:] == b'HELLO':
+                    self.peers = addr
+                    logger.debug(f"UDPEndpoint recv HELLO from {addr}")
             return data
         except ConnectionResetError as e: # 对端未监听端口
             return None
