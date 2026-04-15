@@ -18,5 +18,11 @@ test: clean
 	python -m pip install -e .[dev]
 	pytest tests
 
+venv:
+	@echo "Setting up virtual environment..."
+	python -m venv venv
+	source venv/bin/activate
+	pip install -e .[dev]
+
 clean:
 	rm -fr dist/*
