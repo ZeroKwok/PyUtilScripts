@@ -16,30 +16,9 @@ import threading
 from .utils import *
 from .ntraffic import UDPEndpoint, TCPEndpoint, AnyEndpoint
 
-# 全局变量
 running = True
 
-def print_packet(packet, refix=''):
-    src = dst = "N/A"
-    version = packet[0] >> 4
-    if version == 4:
-        src, dst = packet[12:16], packet[16:20]
-        src, dst = ".".join(map(str, src)), ".".join(map(str, dst))
-    elif version == 6:
-        src, dst = packet[8:24], packet[24:40]
-        src, dst = src.hex(':'), dst.hex(':')
-    print(f"{refix}: {src} -> {dst} (len={len(packet)})")
-
-def report_stats(args, endpoint: AnyEndpoint):
-    """定期汇报流量统计"""
-    while True:
-        time.sleep(args.stats_interval)
-        (elapsed, (tx_packets, tx_bytes, tx_rate), (rx_packets, rx_bytes, rx_rate)) = endpoint.stats()
-        tx = f"{tx_packets} pkts {format_bytes(tx_bytes, precision='.2f')} {format_bytes(tx_rate, precision=' 7.1f', postfix='/s')}"
-        rx = f"{rx_packets} pkts {format_bytes(rx_bytes, precision='.2f')} {format_bytes(rx_rate, precision=' 7.1f', postfix='/s')}"
-        print(f"[*] {elapsed:06.1f}s TX [{tx}] - RX [{rx}]")
-
-def create_tun(name:str, addr: tuple, mtu=1500):
+def create_tun(name:str, addr: tuple, mtu=1400):
     try:
         import pytun_pmd3 as pytun
         if sys.platform == 'win32':
@@ -84,6 +63,25 @@ def forward_peers_to_tun(tun, endpoint:AnyEndpoint, args:dict):
                 time.sleep(1)
         except Exception as e:
             print(f"[!] Error in [TUN <- PEER]: {traceback.format_exc()}")
+
+def print_packet(packet, refix=''):
+    src = dst = "N/A"
+    version = packet[0] >> 4
+    if version == 4:
+        src, dst = packet[12:16], packet[16:20]
+        src, dst = ".".join(map(str, src)), ".".join(map(str, dst))
+    elif version == 6:
+        src, dst = packet[8:24], packet[24:40]
+        src, dst = src.hex(':'), dst.hex(':')
+    print(f"{refix}: {src} -> {dst} (len={len(packet)})")
+
+def report_stats(args, endpoint: AnyEndpoint):
+    while True:
+        time.sleep(args.stats_interval)
+        (elapsed, (tx_packets, tx_bytes, tx_rate), (rx_packets, rx_bytes, rx_rate)) = endpoint.stats()
+        tx = f"{tx_packets} pkts {format_bytes(tx_bytes, precision='.2f')} {format_bytes(tx_rate, precision=' 7.1f', postfix='/s')}"
+        rx = f"{rx_packets} pkts {format_bytes(rx_bytes, precision='.2f')} {format_bytes(rx_rate, precision=' 7.1f', postfix='/s')}"
+        print(f"[*] {elapsed:06.1f}s TX [{tx}] - RX [{rx}]")
 
 def main():
     parser = argparse.ArgumentParser(description="Create a simple TUN to forward IP packets to remote peers")
