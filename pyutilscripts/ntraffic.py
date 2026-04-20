@@ -179,6 +179,7 @@ class TCPEndpoint(AnyEndpoint):
             return False
         if self.connected:
             return True
+
         try:
             if self.sock:
                 self.close()
@@ -187,6 +188,8 @@ class TCPEndpoint(AnyEndpoint):
             self.sock.settimeout(self.timeout)
             self.connected = True
             return True
+        except socket.timeout:
+            return False
         except OSError as e:
             logger.error(f"TCPEndpoint accept error: {e}")
             if self.sock:
@@ -216,7 +219,7 @@ class TCPEndpoint(AnyEndpoint):
 
     def send_packet(self, data):
         if not self.establish():
-            logger.error("TCPEndpoint send packet: failed to establish connection")
+            logger.debug("TCPEndpoint send packet: failed to establish connection")
             return False
         try:
             self.sock.sendall(struct.pack('!I', len(data)) + data)
@@ -229,7 +232,7 @@ class TCPEndpoint(AnyEndpoint):
 
     def recv_packet(self):
         if not self.establish():
-            logger.error("TCPEndpoint recv packet: failed to establish connection")
+            logger.debug("TCPEndpoint recv packet: failed to establish connection")
             return None
         try:
             length = self._recv_exact(4)
