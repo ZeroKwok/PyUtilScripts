@@ -85,8 +85,8 @@ def report_stats(args, endpoint: AnyEndpoint):
 
 def main():
     parser = argparse.ArgumentParser(description="Create a simple TUN to forward IP packets to remote peers")
-    parser.add_argument("--name", default="tun0", help="Interface name")
-    parser.add_argument("--addr", default="fd00::1", help="IPv6 Address") 
+    parser.add_argument("--name", default="tun0", help="Interface name (default: tun0)")
+    parser.add_argument("--addr", default="fd00::1", help="IPv6 Address (default: fd00::1)") 
     parser.add_argument("--protocol", default="udp", help="Transport protocol (udp/tcp)") 
     parser.add_argument("--remote", type=str, default=None, help="Forward packets to remote endpoint")
     parser.add_argument("--listen", type=str, default='0.0.0.0:0', help="Listen for incoming packets")
@@ -167,17 +167,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-'''
-可以工作于两个模式之一:
-
-- 监听模式: 监听指定端口，并等待连接, 类似于服务端
-  - listen 有效, remote 无效
-  - udp 监听端口, 接受数据得到远端地址后, 可双向通讯 
-  - tcp 监听端口, 获取连接后, 可双向通讯
-- 连接模式: 连接指定端口，类似于客户端
-  - listen 无效, remote 有效
-  - udp 发送数据, 对方获取数据后, 可双向通讯
-  - tcp 建立连接后, 可双向通讯
-'''
