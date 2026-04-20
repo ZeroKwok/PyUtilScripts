@@ -12,6 +12,7 @@ import struct
 import socket
 import logging
 import threading
+import contextlib
 
 prefix = b'\xef\x5a'
 logger = logging.getLogger(__name__)
@@ -57,52 +58,71 @@ class UDPEndpoint(AnyEndpoint):
         self.closed = True
 
     def listen(self):
-        if self.sock:
-            self.sock.close()
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind(self.addr)
-        self.addr = self.sock.getsockname()
-        self.closed = False
+        self.close()
+        try:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.sock.bind(self.addr)
+            self.addr = self.sock.getsockname()
+            self.closed = False
+        except OSError as e:
+            logger.error(f"UDPEndpoint listen failed on {self.addr}: {e}")
+            self.close()
+            return False
 
     def establish(self) -> bool:
-        self.send_packet(prefix + b'HELLO')
+        if self.closed or not self.sock:
+            logger.error("UDPEndpoint establish: socket not ready")
+            return False
+        self.send_packet(prefix + b'HELLO') # 握手, 目的是传送地址
         return True
 
     def close(self):
         if self.sock:
             self.closed = True
-            self.sock.close()
+            with contextlib.suppress(Exception):
+                self.sock.close()
             self.sock = None
 
     def release(self):
         self.close()
 
     def send_packet(self, data):
-        if self.peers is None:
-            logger.debug("UDPEndpoint send packet failed: no peers address")
+        if not self.sock:
+            logger.error("UDPEndpoint send: socket not created")
             return False
+        if self.peers is None:
+            logger.debug("UDPEndpoint send: no peers address")
+            return False
+
         try:
             self.sock.sendto(data, self.peers)
             self.add_tx(len(data))
             return True
         except Exception as e:
-            logger.exception(f"UDPEndpoint send error")
+            logger.error(f"UDPEndpoint send failed to {self.peers}: {e}")
             return False
 
     def recv_packet(self):
+        if not self.sock or self.closed:
+            return None
+        
         try:
             data, addr = self.sock.recvfrom(65535)
             self.add_rx(len(data))
+
             if data.startswith(prefix):
                 if data[2:] == b'HELLO':
                     self.peers = addr
                     logger.debug(f"UDPEndpoint recv HELLO from {addr}")
             return data
+        except socket.timeout:
+            return None
         except ConnectionResetError as e: # 对端未监听端口
             return None
-        except Exception as e:
+        except OSError as e:
             if not self.closed:
-                logger.exception(f"UDPEndpoint recv error")
+                logger.error(f"UDPEndpoint recv error: {e}")
             return None
 
 
@@ -123,14 +143,17 @@ class TCPEndpoint(AnyEndpoint):
         if self.connected or not self.addr:
             return False
         try:
-            self.listen_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.listen_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.listen_sock.settimeout(self.timeout)
-            self.listen_sock.bind(self.addr)
-            self.listen_sock.listen(backlog=1)
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.settimeout(self.timeout)
+            sock.bind(self.addr)
+            sock.listen(1)
+            self.listen_sock = sock
             return True
-        except Exception as e:
-            logger.exception(f"TCPEndpoint listen error")
+        except OSError as e:
+            logger.error(f"TCP listen failed on {self.addr}: {str(e)}", exc_info=True)
+            if 'sock' in locals() and sock:
+                sock.close()
             return False
 
     def connect(self):
@@ -144,25 +167,30 @@ class TCPEndpoint(AnyEndpoint):
             self.sock.connect(self.peers)
             self.connected = True
             return True
-        except Exception as e:
-            logger.exception(f"TCPEndpoint connect error")
+        except OSError  as e:
+            logger.error(f"TCPEndpoint connect failed to {self.peers}: {e}")
+            if self.sock:
+                self.close()
             return False
 
     def accept(self):
         if not self.listen_sock:
-            logger.error("TCPEndpoint accept called without listen")
+            logger.error("TCPEndpoint accept: no listen socket")
             return False
         if self.connected:
             return True
         try:
             if self.sock:
-                self.sock.close()
+                self.close()
+
             self.sock, self.peers = self.listen_sock.accept()
             self.sock.settimeout(self.timeout)
             self.connected = True
             return True
-        except Exception as e:
-            logger.exception(f"TCPEndpoint accept error")
+        except OSError as e:
+            logger.error(f"TCPEndpoint accept error: {e}")
+            if self.sock:
+                self.close()
             return False
 
     def establish(self) -> bool:
@@ -176,31 +204,32 @@ class TCPEndpoint(AnyEndpoint):
     def close(self):
         self.connected = False
         if self.sock:
-            self.sock.close()
+            with contextlib.suppress(Exception):
+                self.sock.close()
             self.sock = None
 
     def release(self):
         self.close()
         if self.listen_sock:
-            self.listen_sock.close()
+            with contextlib.suppress(Exception):
+                self.listen_sock.close()
 
     def send_packet(self, data):
-        # 必要时会尝试连接或接受并返回连接结果
         if not self.establish():
-            logger.error("TCPEndpoint send packet failed to establish connection")
+            logger.error("TCPEndpoint send packet: failed to establish connection")
             return False
         try:
             self.sock.sendall(struct.pack('!I', len(data)) + data)
             self.add_tx(len(data))
             return True
-        except Exception as e:
-            self.connected = False
-            logger.exception(f"TCPEndpoint send packet error")
+        except OSError as e:
+            logger.error(f"TCPEndpoint send failed to {self.peers}: {e}")
+            self.close()
             return False
 
     def recv_packet(self):
         if not self.establish():
-            logger.error("TCPEndpoint recv packet failed to establish connection")
+            logger.error("TCPEndpoint recv packet: failed to establish connection")
             return None
         try:
             length = self._recv_exact(4)
@@ -210,25 +239,22 @@ class TCPEndpoint(AnyEndpoint):
             data = self._recv_exact(length)
             self.add_rx(len(data))
             return data
-        except Exception as e:
-            self.connected = False
-            logger.exception(f"TCPEndpoint recv packet error")
+        except OSError as e:
+            logger.error(f"TCPEndpoint recv failed from {self.peers}: {e}")
+            self.close()
             return None
 
     def _recv_exact(self, size):
         data = b''
-        count = 0
         while len(data) < size:
             try:
                 chunk = self.sock.recv(size - len(data))
                 if not chunk: # EOF
-                    self.connected = False
+                    self.close()
                     return None
                 data += chunk
             except socket.timeout:
-                count += 1
-                if count < 2:  # 连续多次超时则认为连接断开
-                    continue
-                self.connected = False
+                logger.warning(f"TCPEndpoint recv timeout, peer={self.peers}")
+                self.close()
                 return None
         return data
