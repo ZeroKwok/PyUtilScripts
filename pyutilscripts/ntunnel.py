@@ -9,6 +9,7 @@
 
 import sys
 import time
+import logging
 import argparse
 import traceback
 import threading
@@ -89,7 +90,7 @@ def main():
     parser.add_argument("--addr", default="fd00::1", help="IPv6 Address (default: fd00::1)") 
     parser.add_argument("--protocol", default="udp", help="Transport protocol (udp/tcp)") 
     parser.add_argument("--remote", type=str, default=None, help="Forward packets to remote endpoint")
-    parser.add_argument("--listen", type=str, default='0.0.0.0:0', help="Listen for incoming packets")
+    parser.add_argument("--listen", type=str, default='0.0.0.0:8001', help="Listen for incoming packets (default: 0.0.0.0:8001)")
     parser.add_argument("--stats-interval", type=int, default=5, help="Traffic report interval in seconds (default: 5)")
     parser.add_argument("--no-stats", action="store_true", help="Disable traffic statistics reporting")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
@@ -98,6 +99,9 @@ def main():
     if args.debug:
         print(f"[*] Debug: Starting with arguments: {args}")
         input("Press Enter to continue...")
+        logging.root.addHandler(logging.StreamHandler())
+        logging.root.setLevel(logging.DEBUG)
+        logging.debug("[*] Debug: Logging enabled")
 
     def parse_addr(addr, default=None):
         if addr is None:
@@ -116,7 +120,9 @@ def main():
         Endpoint = UDPEndpoint
 
     endpoint = Endpoint(addr=args.listen, peers=args.remote)
-    endpoint.listen()
+    
+    if not args.remote:
+        endpoint.listen()
     endpoint.establish()
     print(f"[+] {endpoint.type} socket listen to {endpoint.addr}")
 
