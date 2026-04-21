@@ -187,13 +187,15 @@ class TCPEndpoint(AnyEndpoint):
             self.sock, self.peers = self.listen_sock.accept()
             self.sock.settimeout(self.timeout)
             self.connected = True
+            logger.debug("TCPEndpoint accept: connected to %s" % self.peers)
             return True
         except socket.timeout:
             return False
         except OSError as e:
-            logger.error(f"TCPEndpoint accept error: {e}")
-            if self.sock:
-                self.close()
+            if self.listen_sock:
+                logger.error(f"TCPEndpoint accept error: {e}")
+                if self.sock:
+                    self.close()
             return False
 
     def establish(self) -> bool:
