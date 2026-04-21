@@ -157,15 +157,17 @@ class TCPEndpoint(AnyEndpoint):
             return False
 
     def connect(self):
+        logger.debug(f"TCP connect to {self.addr} ...")
         if self.connected:
             return True
+
         try:
-            if self.sock:
-                self.sock.close()
+            self.close()
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.settimeout(self.timeout)
             self.sock.connect(self.peers)
             self.connected = True
+            logger.info(f"[+] TCP connected to {self.peers}")
             return True
         except OSError  as e:
             logger.error(f"TCPEndpoint connect failed to {self.peers}: {e}")
@@ -181,9 +183,7 @@ class TCPEndpoint(AnyEndpoint):
             return True
 
         try:
-            if self.sock:
-                self.close()
-
+            self.close()
             self.sock, self.peers = self.listen_sock.accept()
             self.sock.settimeout(self.timeout)
             self.connected = True
@@ -218,6 +218,7 @@ class TCPEndpoint(AnyEndpoint):
         if self.listen_sock:
             with contextlib.suppress(Exception):
                 self.listen_sock.close()
+        self.listen_sock = None
 
     def send_packet(self, data):
         if not self.establish():
