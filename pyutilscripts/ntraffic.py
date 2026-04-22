@@ -138,10 +138,13 @@ class TCPEndpoint(AnyEndpoint):
         self.listen_sock = None
 
     def listen(self):
-        if self.listen_sock:
+        if self.peers:          # client mode not need to listen
+            return True
+        if self.listen_sock:    # already listening
             return True
         if self.connected or not self.addr:
             return False
+
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
