@@ -187,7 +187,7 @@ class TCPEndpoint(AnyEndpoint):
             self.sock, self.peers = self.listen_sock.accept()
             self.sock.settimeout(self.timeout)
             self.connected = True
-            logger.debug("TCPEndpoint accept: connected to %s" % self.peers)
+            logger.debug(f"TCPEndpoint accept: connected to {self.peers}")
             return True
         except socket.timeout:
             return False
