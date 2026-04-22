@@ -114,15 +114,13 @@ def main():
     args.remote = parse_addr(args.remote, default=('127.0.0.1', 0))
     args.listen = parse_addr(args.listen, default=('0.0.0.0', 0))
 
-    if args.protocol.lower() != 'udp':
+    if args.protocol.upper() != 'UDP':
         Endpoint = TCPEndpoint
     else:
         Endpoint = UDPEndpoint
 
     endpoint = Endpoint(addr=args.listen, peers=args.remote)
-    
-    if not args.remote:
-        endpoint.listen()
+    endpoint.listen()
     endpoint.establish()
     print(f"[+] {endpoint.type} socket listen to {endpoint.addr}")
 
