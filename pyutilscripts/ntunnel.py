@@ -13,6 +13,7 @@ import logging
 import argparse
 import traceback
 import threading
+import contextlib
 
 from .utils import *
 from .ntraffic import UDPEndpoint, TCPEndpoint, AnyEndpoint
@@ -37,13 +38,12 @@ def create_tun(name:str, addr: tuple, mtu=1400):
     exit(1)
 
 def forward_tun_to_peers(tun, endpoint:AnyEndpoint, args:dict):
-    """将 TUN 读取的数据通过 UDP 转发到远端，并统计流量"""
     global running
     while running:
         try:
             packet = tun.read(tun.mtu)
             if packet:
-                args.debug and print_packet(packet, refix='[TUN -> PEER]')
+                args.debug and print_packet(packet, prefix='[TUN -> PEER]')
                 endpoint.send_packet(packet)
         except TimeoutError:
             continue
@@ -52,20 +52,20 @@ def forward_tun_to_peers(tun, endpoint:AnyEndpoint, args:dict):
                 print(f"[!] Error in [TUN -> PEER]: {traceback.format_exc()}")
 
 def forward_peers_to_tun(tun, endpoint:AnyEndpoint, args:dict):
-    """接收远端 UDP 数据，写回 TUN 接口，并统计流量"""
     global running
     while running:
         try:
             data = endpoint.recv_packet()
             if data:
-                args.debug and print_packet(data, refix='[TUN <- PEER]')
-                tun.write(data)
+                args.debug and print_packet(data, prefix='[TUN <- PEER]')
+                with contextlib.suppress(OSError): # 忽略无效数据包引发的无效参数异常
+                    tun.write(data)
             else:
                 time.sleep(1)
         except Exception as e:
             print(f"[!] Error in [TUN <- PEER]: {traceback.format_exc()}")
 
-def print_packet(packet, refix=''):
+def print_packet(packet, prefix=''):
     src = dst = "N/A"
     version = packet[0] >> 4
     if version == 4:
@@ -74,7 +74,7 @@ def print_packet(packet, refix=''):
     elif version == 6:
         src, dst = packet[8:24], packet[24:40]
         src, dst = src.hex(':'), dst.hex(':')
-    print(f"{refix}: {src} -> {dst} (len={len(packet)})")
+    print(f"{prefix}: {src} -> {dst} (len={len(packet)})")
 
 def report_stats(args, endpoint: AnyEndpoint):
     while True:
