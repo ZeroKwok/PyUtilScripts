@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.10.0
+
+- fcopy   优化 交互模式的行动清单, 将说明注释放在文档尾部
+- ntunnel 添加 一个简单的网络工具, 基于 TUN 设备的 UPD/TCP 隧道，用于向远端转发 IP报文
+
 ## v0.9.0
 
 - httpd 添加 http.server 限速版的文件服务器
